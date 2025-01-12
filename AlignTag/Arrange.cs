@@ -1,10 +1,11 @@
-﻿using System;
+using Autodesk.Revit.DB;
+using Autodesk.Revit.UI;
+using Autodesk.Revit.UI.Selection;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Autodesk.Revit.DB;
-using Autodesk.Revit.UI;
 using Autodesk.Revit.Attributes;
 
 namespace AlignTag
@@ -14,96 +15,63 @@ namespace AlignTag
     {
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
-            UIDocument UIdoc = commandData.Application.ActiveUIDocument;
-            Document doc = UIdoc.Document;
-            using (TransactionGroup transGroup = new TransactionGroup(doc))
+            UIDocument uidoc = commandData.Application.ActiveUIDocument;
+            Document doc = uidoc.Document;
+            View view = doc.ActiveView;
+
+            try
             {
-
-                using (Transaction tx = new Transaction(doc))
+                // Kullanıcıdan tag seçimini al
+                IList<Reference> pickedRefs = uidoc.Selection.PickObjects(ObjectType.Element, new TagFilter(), "Tag'leri seçin");
+                if (pickedRefs == null || pickedRefs.Count == 0)
                 {
-                    try
-                    {
-                        transGroup.Start("Arrange Tags");
-                        // Add Your Code Here
-                        ArrangeTag(UIdoc, tx);
-                        transGroup.Assimilate();
-                        // Return Success
-                        return Result.Succeeded;
+                    return Result.Cancelled;
+                }
 
-                    }
-
-                    catch (Autodesk.Revit.Exceptions.OperationCanceledException exceptionCanceled)
+                // Seçilen elementleri IndependentTag'e dönüştür
+                List<IndependentTag> selectedTags = new List<IndependentTag>();
+                foreach (Reference reference in pickedRefs)
+                {
+                    Element elem = doc.GetElement(reference);
+                    if (elem is IndependentTag tag)
                     {
-                        message = exceptionCanceled.Message;
-                        if (tx.HasStarted())
-                        {
-                            tx.RollBack();
-                        }
-                        return Autodesk.Revit.UI.Result.Cancelled;
-                    }
-                    catch (ErrorMessageException errorEx)
-                    {
-                        // checked exception need to show in error messagebox
-                        message = errorEx.Message;
-                        if (tx.HasStarted())
-                        {
-                            tx.RollBack();
-                        }
-                        return Autodesk.Revit.UI.Result.Failed;
-                    }
-                    catch (Exception ex)
-                    {
-                        // unchecked exception cause command failed
-                        message = ex.Message;
-                        //Trace.WriteLine(ex.ToString());
-                        if (tx.HasStarted())
-                        {
-                            tx.RollBack();
-                        }
-                        return Autodesk.Revit.UI.Result.Failed;
+                        selectedTags.Add(tag);
                     }
                 }
 
-            }
+                if (selectedTags.Count == 0)
+                {
+                    TaskDialog.Show("Uyarı", "Lütfen en az bir tag seçin.");
+                    return Result.Cancelled;
+                }
 
+                using (Transaction trans = new Transaction(doc))
+                {
+                    trans.Start("Arrange Tags");
+                    ArrangeTags(selectedTags, view, doc);
+                    trans.Commit();
+                }
+
+                return Result.Succeeded;
+            }
+            catch (Autodesk.Revit.Exceptions.OperationCanceledException)
+            {
+                return Result.Cancelled;
+            }
+            catch (Exception ex)
+            {
+                message = ex.Message;
+                return Result.Failed;
+            }
         }
 
-        private void ArrangeTag(UIDocument uidoc, Transaction tx)
+        private void ArrangeTags(List<IndependentTag> tags, View view, Document doc)
         {
-            Document doc = uidoc.Document;
-            View activeView = doc.ActiveView;
-
             //Check the current view
-            if (!activeView.CropBoxActive)
+            if (!view.CropBoxActive)
             {
                 throw new ErrorMessageException("Please set a crop box to the view");
             }
-
-            IEnumerable<IndependentTag> tags = from elem in new FilteredElementCollector(doc, activeView.Id).OfClass(typeof(IndependentTag)).WhereElementIsNotElementType()
-                                               let type = elem as IndependentTag
-                                               where type.HasLeader == true
-                                               select type;
-
-            tx.Start("Prepare Tags");
-
-            //Remove all leader to find the correct tag height and width
-            foreach (IndependentTag tag in tags)
-            {
-                tag.LeaderEndCondition = LeaderEndCondition.Free;
-                
-#if Version2022 || Version2023 || Version2024
-                Reference referencedElement = tag.GetTaggedReferences().FirstOrDefault();
-                tag.SetLeaderElbow(referencedElement, tag.TagHeadPosition);
-#elif Version2019 || Version2020 || Version2021
-                tag.LeaderEnd = tag.TagHeadPosition;
-#endif
-
-            }
-
-
-
-            tx.Commit();
-            tx.Start("Arrange Tags");
 
             //Create two lists of TagLeader
             List<TagLeader> leftTagLeaders = new List<TagLeader>();
@@ -123,8 +91,8 @@ namespace AlignTag
             }
 
             //Create a list of potential location points for tag headers
-            List<XYZ> leftTagHeadPoints = CreateTagPositionPoints(activeView, leftTagLeaders, ViewSides.Left);
-            List<XYZ> rightTagHeadPoints = CreateTagPositionPoints(activeView, rightTagLeaders, ViewSides.Right);
+            List<XYZ> leftTagHeadPoints = CreateTagPositionPoints(view, leftTagLeaders, ViewSides.Left);
+            List<XYZ> rightTagHeadPoints = CreateTagPositionPoints(view, rightTagLeaders, ViewSides.Right);
 
             //Sort tag by Y position
             leftTagLeaders = leftTagLeaders.OrderBy(x => x.LeaderEnd.X).ToList();
@@ -133,19 +101,15 @@ namespace AlignTag
             //place and sort
             PlaceAndSort(leftTagHeadPoints, leftTagLeaders);
 
-
             //Sort tag by Y position
             rightTagLeaders = rightTagLeaders.OrderByDescending(x => x.LeaderEnd.X).ToList();
             rightTagLeaders = rightTagLeaders.OrderBy(x => x.LeaderEnd.Y).ToList();
 
             //place and sort
             PlaceAndSort(rightTagHeadPoints, rightTagLeaders);
-
-            tx.Commit();
-
         }
 
-        private void PlaceAndSort(List<XYZ> positionPoints,List<TagLeader> tags)
+        private void PlaceAndSort(List<XYZ> positionPoints, List<TagLeader> tags)
         {
             //place TagLeader
             foreach (TagLeader tag in tags)
@@ -192,9 +156,15 @@ namespace AlignTag
 
         private XYZ FindNearestPoint(List<XYZ> points, XYZ basePoint)
         {
+            if (points == null || points.Count == 0)
+            {
+                // Eğer nokta listesi boşsa, basePoint'i döndür
+                return basePoint;
+            }
+
             XYZ nearestPoint = points.FirstOrDefault();
             double nearestDistance = basePoint.DistanceTo(nearestPoint);
-            double currentDistance = basePoint.DistanceTo(nearestPoint);
+            double currentDistance;
 
             foreach (XYZ point in points)
             {
@@ -202,48 +172,64 @@ namespace AlignTag
                 if (currentDistance < nearestDistance)
                 {
                     nearestPoint = point;
-                    nearestDistance = basePoint.DistanceTo(point);
+                    nearestDistance = currentDistance;
                 }
             }
             return nearestPoint;
         }
 
-        private List<XYZ> CreateTagPositionPoints(View activeView, List<TagLeader> tagLeaders, ViewSides side)
+        private List<XYZ> CreateTagPositionPoints(View view, List<TagLeader> tagLeaders, ViewSides side)
         {
-            List<XYZ> points = new List<XYZ>();
+            if (tagLeaders.Count == 0)
+                return new List<XYZ>();
 
-            BoundingBoxXYZ bbox = activeView.CropBox;
+            // View sınırlarını al
+            BoundingBoxXYZ cropBox = view.CropBox;
+            XYZ min = cropBox.Min;
+            XYZ max = cropBox.Max;
 
-            if (tagLeaders.Count != 0)
+            // Tag'ler arasındaki dikey mesafe
+            double verticalSpacing = 0.3; // 30 cm
+
+            // Tag'lerin yerleştirileceği X koordinatı
+            double xPosition;
+            if (side == ViewSides.Left)
             {
-                //Get largest tag dimension
-                double tagHeight = tagLeaders.Max(x => x.TagHeight);
-                double tagWidth = tagLeaders.Max(x => x.TagWidth);
-
-                double step = tagHeight*1.2;
-                //double step = (bbox.Max.Y - bbox.Min.Y) / 20;
-                int max = (int)Math.Round((bbox.Max.Y - bbox.Min.Y) / step);
-                XYZ baseRight = new XYZ(bbox.Max.X, bbox.Min.Y, 0);
-                XYZ baseLeft = new XYZ(bbox.Min.X, bbox.Min.Y, 0);
-
-                //create sides points
-                for (int i = max*2; i > 0; i--)
-                {
-                    if (side == ViewSides.Left)
-                    {
-                        //Add left point
-                        points.Add(baseLeft + new XYZ(0, step * i, 0));
-                    }
-                    else
-                    {
-                        //Add right point
-                        points.Add(baseRight + new XYZ(0, step * i, 0));
-                    }
-                }
+                // Sol taraf için: View'ın sol kenarından tag genişliğinin 2 katı kadar içeride
+                xPosition = min.X + Math.Abs(tagLeaders[0].TagWidth) * 2;
+            }
+            else
+            {
+                // Sağ taraf için: View'ın sağ kenarından tag genişliğinin 2 katı kadar içeride
+                xPosition = max.X - Math.Abs(tagLeaders[0].TagWidth) * 2;
             }
 
+            // Tag'lerin yerleştirileceği Y koordinatlarını hesapla
+            List<XYZ> points = new List<XYZ>();
+            double totalHeight = (tagLeaders.Count - 1) * verticalSpacing;
+            double startY = (max.Y + min.Y - totalHeight) / 2;
+
+            for (int i = 0; i < tagLeaders.Count; i++)
+            {
+                double yPosition = startY + (i * verticalSpacing);
+                points.Add(new XYZ(xPosition, yPosition, 0));
+            }
 
             return points;
+        }
+    }
+
+    // Tag seçimi için filter class
+    public class TagFilter : ISelectionFilter
+    {
+        public bool AllowElement(Element elem)
+        {
+            return elem is IndependentTag;
+        }
+
+        public bool AllowReference(Reference reference, XYZ position)
+        {
+            return false;
         }
     }
 
@@ -260,20 +246,23 @@ namespace AlignTag
             _currentView = _doc.GetElement(tag.OwnerViewId) as View;
             _tag = tag;
 
-            _taggedElement = GetTaggedElement(_doc,_tag);
+            _taggedElement = GetTaggedElement(_doc, _tag);
             _tagHeadPosition = _currentView.CropBox.Transform.Inverse.OfPoint(tag.TagHeadPosition);
             _tagHeadPosition = new XYZ(_tagHeadPosition.X, _tagHeadPosition.Y, 0);
-            _leaderEnd = GetLeaderEnd(_taggedElement,_currentView);
+            _leaderEnd = GetLeaderEnd(_taggedElement, _currentView);
 
-            //View center
+            // View'ın ortasını bul
             XYZ viewCenter = (_currentView.CropBox.Max + _currentView.CropBox.Min) / 2;
-            if (viewCenter.X > _leaderEnd.X)
+            
+            // Eğer tag'in bağlı olduğu element view'ın ortasından soldaysa, tag sağa
+            // Eğer tag'in bağlı olduğu element view'ın ortasından sağdaysa, tag sola
+            if (_leaderEnd.X < viewCenter.X)
             {
-                _side = ViewSides.Left;
+                _side = ViewSides.Right;  // Element solda, tag sağa
             }
             else
             {
-                _side = ViewSides.Right;
+                _side = ViewSides.Left;   // Element sağda, tag sola
             }
 
             GetTagDimension();
@@ -327,7 +316,7 @@ namespace AlignTag
             _elbowPosition = _tagCenter + delta;
 
             //Update lines
-            if (_leaderEnd.DistanceTo(_elbowPosition)> _doc.Application.ShortCurveTolerance)
+            if (_leaderEnd.DistanceTo(_elbowPosition) > _doc.Application.ShortCurveTolerance)
             {
                 _endLine = Line.CreateBound(_leaderEnd, _elbowPosition);
             }
@@ -416,7 +405,7 @@ namespace AlignTag
 
             //Get leader end in view reference
             leaderEnd = viewBox.Transform.Inverse.OfPoint(leaderEnd);
-            leaderEnd = new XYZ(Math.Round(leaderEnd.X,4), Math.Round(leaderEnd.Y,4) ,0);
+            leaderEnd = new XYZ(Math.Round(leaderEnd.X, 4), Math.Round(leaderEnd.Y, 4), 0);
 
             return leaderEnd;
         }
@@ -425,26 +414,28 @@ namespace AlignTag
         {
             _tag.LeaderEndCondition = LeaderEndCondition.Attached;
 
+            // Tag'i kenardan uzaklığını ayarla
             XYZ offsetFromView = new XYZ();
             if (_side == ViewSides.Left)
             {
-                offsetFromView = new XYZ(-Math.Abs(_tagWidth)*0.5-0.1, 0, 0);
+                // Sol tarafta: View'ın sol kenarından tag genişliğinin 1.5 katı kadar içeride
+                offsetFromView = new XYZ(-Math.Abs(_tagWidth) * 1.5, 0, 0);
             }
             else
             {
-                offsetFromView = new XYZ(Math.Abs(_tagWidth )* 0.5+0.1, 0, 0);
+                // Sağ tarafta: View'ın sağ kenarından tag genişliğinin 1.5 katı kadar içeride
+                offsetFromView = new XYZ(Math.Abs(_tagWidth) * 1.5, 0, 0);
             }
 
-
+            // Tag'in yeni pozisyonunu ayarla
             _tag.TagHeadPosition = _currentView.CropBox.Transform.OfPoint(_headOffset + _tagCenter + offsetFromView);
+
 #if Version2022 || Version2023 || Version2024
             Reference referencedElement = _tag.GetTaggedReferences().FirstOrDefault();
             _tag.SetLeaderElbow(referencedElement, _currentView.CropBox.Transform.OfPoint(_elbowPosition));
-
 #elif Version2019 || Version2020 || Version2021
-             _tag.LeaderElbow = _currentView.CropBox.Transform.OfPoint(_elbowPosition);
+            _tag.LeaderElbow = _currentView.CropBox.Transform.OfPoint(_elbowPosition);
 #endif
-
         }
     }
 

@@ -1,4 +1,4 @@
-﻿#region Namespaces
+#region Namespaces
 using System;
 using System.Linq;
 using System.Collections.Generic;
@@ -230,15 +230,15 @@ namespace AlignTag
                     }
                     break;
                 case AlignType.Down:
-                    farthestAnnotation =
-                        annotationElements.OrderBy(x => x.DownRight.Y).FirstOrDefault();
+                    // En alttaki tag'i bul
+                    farthestAnnotation = annotationElements.OrderBy(x => x.UpRight.Y).FirstOrDefault();
                     foreach (AnnotationElement annotationElement in annotationElements)
                     {
-                        XYZ resultingPoint = new XYZ(annotationElement.DownRight.X, farthestAnnotation.DownRight.Y, 0);
+                        XYZ resultingPoint = new XYZ(annotationElement.Center.X, farthestAnnotation.UpRight.Y, 0);
                         annotationElement.MoveTo(resultingPoint, AlignType.Down);
                     }
                     break;
-                case AlignType.Center: //On the same vertical axe
+                case AlignType.Center:
                     List<AnnotationElement> sortedAnnotationElements = annotationElements.OrderBy(x => x.UpRight.X).ToList();
                     AnnotationElement rightAnnotation = sortedAnnotationElements.LastOrDefault();
                     AnnotationElement leftAnnotation = sortedAnnotationElements.FirstOrDefault();
@@ -249,21 +249,22 @@ namespace AlignTag
                         annotationElement.MoveTo(resultingPoint, AlignType.Center);
                     }
                     break;
-                case AlignType.Middle: //On the same horizontal axe
-                    sortedAnnotationElements = annotationElements.OrderBy(x => x.UpRight.Y).ToList();
-                    AnnotationElement upperAnnotation = sortedAnnotationElements.LastOrDefault();
-                    AnnotationElement lowerAnnotation = sortedAnnotationElements.FirstOrDefault();
-                    double YCoord = (upperAnnotation.Center.Y + lowerAnnotation.Center.Y) / 2;
-                    foreach (AnnotationElement annotationElement in sortedAnnotationElements)
+                case AlignType.Middle:
+                    // En üst ve en alt tag'i bul
+                    var topElement = annotationElements.OrderByDescending(x => x.UpRight.Y).FirstOrDefault();
+                    var bottomElement = annotationElements.OrderBy(x => x.UpRight.Y).FirstOrDefault();
+                    // Orta noktayı hesapla
+                    double middleY = (topElement.UpRight.Y + bottomElement.UpRight.Y) / 2.0;
+                    foreach (AnnotationElement annotationElement in annotationElements)
                     {
-                        XYZ resultingPoint = new XYZ(annotationElement.Center.X, YCoord, 0);
+                        XYZ resultingPoint = new XYZ(annotationElement.Center.X, middleY, 0);
                         annotationElement.MoveTo(resultingPoint, AlignType.Middle);
                     }
                     break;
                 case AlignType.Vertically:
                     sortedAnnotationElements = annotationElements.OrderBy(x => x.UpRight.Y).ToList();
-                    upperAnnotation = sortedAnnotationElements.LastOrDefault();
-                    lowerAnnotation = sortedAnnotationElements.FirstOrDefault();
+                    AnnotationElement upperAnnotation = sortedAnnotationElements.LastOrDefault();
+                    AnnotationElement lowerAnnotation = sortedAnnotationElements.FirstOrDefault();
                     double spacing = (upperAnnotation.Center.Y - lowerAnnotation.Center.Y) / (annotationElements.Count - 1);
                     int i = 0;
                     foreach (AnnotationElement annotationElement in sortedAnnotationElements)

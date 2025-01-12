@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -33,7 +33,6 @@ namespace AlignTag
             Parent = e;
             _doc = e.Document;
 
-
             if (_doc.GetElement(e.OwnerViewId) != null)
             {
                 _ownerView = _doc.GetElement(e.OwnerViewId) as View;
@@ -42,7 +41,6 @@ namespace AlignTag
             {
                 _ownerView = _doc.ActiveView;
             }
-
 
             //Create the view plan
             Plane viewPlane = Plane.CreateByNormalAndOrigin(_ownerView.ViewDirection, _ownerView.Origin);
@@ -210,13 +208,13 @@ namespace AlignTag
                         displacementVector = point - UpRight;
                         break;
                     case AlignType.Down:
-                        displacementVector = point - DownRight;
+                        displacementVector = new XYZ(0, point.Y - UpRight.Y, 0);  // Sadece Y koordinatını değiştir
                         break;
                     case AlignType.Center:
-                        displacementVector = point - Center;
+                        displacementVector = new XYZ(point.X - Center.X, 0, 0);  // Sadece X koordinatını değiştir
                         break;
                     case AlignType.Middle:
-                        displacementVector = point - Center;
+                        displacementVector = new XYZ(0, point.Y - UpRight.Y, 0);  // Sadece Y koordinatını değiştir
                         break;
                     case AlignType.Vertically:
                         displacementVector = point - Center;
