@@ -313,14 +313,14 @@ namespace AlignTag
                 // Tag'in mevcut konumunu al
                 XYZ currentPos = tag.TagHeadPosition;
                 
-                // Tag'in X koordinatı merkez noktasından solda mı sağda mı?
-                if (currentPos.X < centerX)
+                // Tag'in X koordinatı merkez noktasından sağdaysa sağa, soldaysa sola taşı
+                if (currentPos.X >= centerX)
                 {
-                    rightSideTags.Add(tag); // Sol taraftaysa sağa taşı
+                    rightSideTags.Add(tag); // Sağ taraftaysa sağda kal
                 }
                 else
                 {
-                    leftSideTags.Add(tag); // Sağ taraftaysa sola taşı
+                    leftSideTags.Add(tag); // Sol taraftaysa solda kal
                 }
             }
 
