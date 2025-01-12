@@ -10,238 +10,9 @@ using Autodesk.Revit.Attributes;
 
 namespace AlignTag
 {
-    [Transaction(TransactionMode.Manual)]
-    class Arrange : IExternalCommand
-    {
-        public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
-        {
-            UIDocument uidoc = commandData.Application.ActiveUIDocument;
-            Document doc = uidoc.Document;
-            View view = doc.ActiveView;
+    public enum ViewSides { Left, Right };
 
-            try
-            {
-                // Kullanıcıdan tag seçimini al
-                IList<Reference> pickedRefs = uidoc.Selection.PickObjects(ObjectType.Element, new TagFilter(), "Tag'leri seçin");
-                if (pickedRefs == null || pickedRefs.Count == 0)
-                {
-                    return Result.Cancelled;
-                }
-
-                // Seçilen elementleri IndependentTag'e dönüştür
-                List<IndependentTag> selectedTags = new List<IndependentTag>();
-                foreach (Reference reference in pickedRefs)
-                {
-                    Element elem = doc.GetElement(reference);
-                    if (elem is IndependentTag tag)
-                    {
-                        selectedTags.Add(tag);
-                    }
-                }
-
-                if (selectedTags.Count == 0)
-                {
-                    TaskDialog.Show("Uyarı", "Lütfen en az bir tag seçin.");
-                    return Result.Cancelled;
-                }
-
-                using (Transaction trans = new Transaction(doc))
-                {
-                    trans.Start("Arrange Tags");
-                    ArrangeTags(selectedTags, view, doc);
-                    trans.Commit();
-                }
-
-                return Result.Succeeded;
-            }
-            catch (Autodesk.Revit.Exceptions.OperationCanceledException)
-            {
-                return Result.Cancelled;
-            }
-            catch (Exception ex)
-            {
-                message = ex.Message;
-                return Result.Failed;
-            }
-        }
-
-        private void ArrangeTags(List<IndependentTag> tags, View view, Document doc)
-        {
-            //Check the current view
-            if (!view.CropBoxActive)
-            {
-                throw new ErrorMessageException("Please set a crop box to the view");
-            }
-
-            //Create two lists of TagLeader
-            List<TagLeader> leftTagLeaders = new List<TagLeader>();
-            List<TagLeader> rightTagLeaders = new List<TagLeader>();
-
-            foreach (IndependentTag tag in tags)
-            {
-                TagLeader currentTag = new TagLeader(tag, doc);
-                if (currentTag.Side == ViewSides.Left)
-                {
-                    leftTagLeaders.Add(currentTag);
-                }
-                else
-                {
-                    rightTagLeaders.Add(currentTag);
-                }
-            }
-
-            //Create a list of potential location points for tag headers
-            List<XYZ> leftTagHeadPoints = CreateTagPositionPoints(view, leftTagLeaders, ViewSides.Left);
-            List<XYZ> rightTagHeadPoints = CreateTagPositionPoints(view, rightTagLeaders, ViewSides.Right);
-
-            //Sort tag by Y position
-            leftTagLeaders = leftTagLeaders.OrderBy(x => x.LeaderEnd.X).ToList();
-            leftTagLeaders = leftTagLeaders.OrderBy(x => x.LeaderEnd.Y).ToList();
-
-            //place and sort
-            PlaceAndSort(leftTagHeadPoints, leftTagLeaders);
-
-            //Sort tag by Y position
-            rightTagLeaders = rightTagLeaders.OrderByDescending(x => x.LeaderEnd.X).ToList();
-            rightTagLeaders = rightTagLeaders.OrderBy(x => x.LeaderEnd.Y).ToList();
-
-            //place and sort
-            PlaceAndSort(rightTagHeadPoints, rightTagLeaders);
-        }
-
-        private void PlaceAndSort(List<XYZ> positionPoints, List<TagLeader> tags)
-        {
-            //place TagLeader
-            foreach (TagLeader tag in tags)
-            {
-                XYZ nearestPoint = FindNearestPoint(positionPoints, tag.TagCenter);
-                tag.TagCenter = nearestPoint;
-
-                //remove this point from the list
-                positionPoints.Remove(nearestPoint);
-            }
-
-            //unCross leaders (2 times)
-            UnCross(tags);
-            UnCross(tags);
-
-            //update their position
-            foreach (TagLeader tag in tags)
-            {
-                tag.UpdateTagPosition();
-            }
-        }
-
-        private void UnCross(List<TagLeader> tags)
-        {
-            foreach (TagLeader tag in tags)
-            {
-                foreach (TagLeader otherTag in tags)
-                {
-                    if (tag != otherTag)
-                    {
-                        if (tag.BaseLine.Intersect(otherTag.BaseLine) == SetComparisonResult.Overlap
-                            || tag.BaseLine.Intersect(otherTag.EndLine) == SetComparisonResult.Overlap
-                            || tag.EndLine.Intersect(otherTag.BaseLine) == SetComparisonResult.Overlap
-                            || tag.EndLine.Intersect(otherTag.EndLine) == SetComparisonResult.Overlap)
-                        {
-                            XYZ newPosition = tag.TagCenter;
-                            tag.TagCenter = otherTag.TagCenter;
-                            otherTag.TagCenter = newPosition;
-                        }
-                    }
-                }
-            }
-        }
-
-        private XYZ FindNearestPoint(List<XYZ> points, XYZ basePoint)
-        {
-            if (points == null || points.Count == 0)
-            {
-                // Eğer nokta listesi boşsa, basePoint'i döndür
-                return basePoint;
-            }
-
-            XYZ nearestPoint = points.FirstOrDefault();
-            double nearestDistance = basePoint.DistanceTo(nearestPoint);
-            double currentDistance;
-
-            foreach (XYZ point in points)
-            {
-                currentDistance = basePoint.DistanceTo(point);
-                if (currentDistance < nearestDistance)
-                {
-                    nearestPoint = point;
-                    nearestDistance = currentDistance;
-                }
-            }
-            return nearestPoint;
-        }
-
-        private List<XYZ> CreateTagPositionPoints(View view, List<TagLeader> tagLeaders, ViewSides side)
-        {
-            if (tagLeaders.Count == 0)
-                return new List<XYZ>();
-
-            // View sınırlarını al
-            BoundingBoxXYZ cropBox = view.CropBox;
-            XYZ min = cropBox.Min;
-            XYZ max = cropBox.Max;
-
-            // View'ın genişlik ve yüksekliğini hesapla
-            double viewWidth = max.X - min.X;
-            double viewHeight = max.Y - min.Y;
-
-            // Tag'ler arasındaki dikey mesafe (view yüksekliğinin %15'i)
-            double verticalSpacing = viewHeight * 0.15;
-
-            // Tag'lerin kenardan uzaklığı (view genişliğinin %20'si)
-            double edgeOffset = viewWidth * 0.20;
-
-            // Tag'lerin yerleştirileceği X koordinatı
-            double xPosition;
-            if (side == ViewSides.Left)
-            {
-                // Sol taraf için: View'ın sol kenarından edgeOffset kadar içeride
-                xPosition = min.X + edgeOffset;
-            }
-            else
-            {
-                // Sağ taraf için: View'ın sağ kenarından edgeOffset kadar içeride
-                xPosition = max.X - edgeOffset;
-            }
-
-            // Tag'lerin yerleştirileceği Y koordinatlarını hesapla
-            List<XYZ> points = new List<XYZ>();
-            
-            // Başlangıç Y pozisyonunu view'ın üst kısmına yakın al
-            double startY = max.Y - (viewHeight * 0.15);  // Üstten %15 aşağıda başla
-
-            for (int i = 0; i < tagLeaders.Count; i++)
-            {
-                double yPosition = startY - (i * verticalSpacing);
-                points.Add(new XYZ(xPosition, yPosition, 0));
-            }
-
-            return points;
-        }
-    }
-
-    // Tag seçimi için filter class
-    public class TagFilter : ISelectionFilter
-    {
-        public bool AllowElement(Element elem)
-        {
-            return elem is IndependentTag;
-        }
-
-        public bool AllowReference(Reference reference, XYZ position)
-        {
-            return false;
-        }
-    }
-
-    class TagLeader
+    public class TagLeader
     {
         private Document _doc;
         private View _currentView;
@@ -456,5 +227,138 @@ namespace AlignTag
         }
     }
 
-    enum ViewSides { Left, Right };
+    [Transaction(TransactionMode.Manual)]
+    class Arrange : IExternalCommand
+    {
+        public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
+        {
+            UIDocument uidoc = commandData.Application.ActiveUIDocument;
+            Document doc = uidoc.Document;
+            View view = doc.ActiveView;
+
+            try
+            {
+                // Kullanıcıdan tag seçimini al
+                IList<Reference> pickedRefs = uidoc.Selection.PickObjects(ObjectType.Element, new TagFilter(), "Tag'leri seçin");
+                if (pickedRefs == null || pickedRefs.Count == 0)
+                {
+                    return Result.Cancelled;
+                }
+
+                // Seçilen elementleri IndependentTag'e dönüştür
+                List<IndependentTag> selectedTags = new List<IndependentTag>();
+                foreach (Reference reference in pickedRefs)
+                {
+                    Element elem = doc.GetElement(reference);
+                    if (elem is IndependentTag tag)
+                    {
+                        selectedTags.Add(tag);
+                    }
+                }
+
+                if (selectedTags.Count == 0)
+                {
+                    TaskDialog.Show("Uyarı", "Lütfen en az bir tag seçin.");
+                    return Result.Cancelled;
+                }
+
+                using (Transaction trans = new Transaction(doc))
+                {
+                    trans.Start("Arrange Tags");
+                    ArrangeTags(view, selectedTags);
+                    trans.Commit();
+                }
+
+                return Result.Succeeded;
+            }
+            catch (Autodesk.Revit.Exceptions.OperationCanceledException)
+            {
+                return Result.Cancelled;
+            }
+            catch (Exception ex)
+            {
+                message = ex.Message;
+                return Result.Failed;
+            }
+        }
+
+        private void ArrangeTags(View view, List<IndependentTag> tags)
+        {
+            if (tags.Count == 0)
+                return;
+
+            // View sınırlarını al
+            BoundingBoxXYZ cropBox = view.CropBox;
+            XYZ min = cropBox.Min;
+            XYZ max = cropBox.Max;
+
+            // View'ın genişlik, yükseklik ve orta noktasını hesapla
+            double viewWidth = max.X - min.X;
+            double viewHeight = max.Y - min.Y;
+            double centerX = min.X + (viewWidth / 2);
+
+            // Tag'lerin kenardan uzaklığı (view genişliğinin %20'si)
+            double edgeOffset = viewWidth * 0.20;
+
+            // Sol ve sağ taraf için sabit X koordinatları
+            double leftX = min.X + edgeOffset;
+            double rightX = max.X - edgeOffset;
+
+            // Tag'leri mevcut konumlarına göre grupla
+            var leftSideTags = new List<IndependentTag>();
+            var rightSideTags = new List<IndependentTag>();
+
+            foreach (var tag in tags)
+            {
+                // Tag'in mevcut konumunu al
+                XYZ currentPos = tag.TagHeadPosition;
+                
+                // Tag'in X koordinatı merkez noktasından solda mı sağda mı?
+                if (currentPos.X < centerX)
+                {
+                    rightSideTags.Add(tag); // Sol taraftaysa sağa taşı
+                }
+                else
+                {
+                    leftSideTags.Add(tag); // Sağ taraftaysa sola taşı
+                }
+            }
+
+            // Tag'ler arasındaki dikey mesafe (view yüksekliğinin %12'si)
+            double verticalSpacing = viewHeight * 0.12;
+
+            // Başlangıç Y pozisyonunu view'ın üst kısmına yakın al
+            double startY = max.Y - (viewHeight * 0.15);  // Üstten %15 aşağıda başla
+
+            // Sol taraftaki tag'leri yerleştir
+            for (int i = 0; i < leftSideTags.Count; i++)
+            {
+                var tag = leftSideTags[i];
+                double yPosition = startY - (i * verticalSpacing);
+                tag.TagHeadPosition = new XYZ(leftX, yPosition, 0);
+            }
+
+            // Sağ taraftaki tag'leri yerleştir
+            for (int i = 0; i < rightSideTags.Count; i++)
+            {
+                var tag = rightSideTags[i];
+                double yPosition = startY - (i * verticalSpacing);
+                tag.TagHeadPosition = new XYZ(rightX, yPosition, 0);
+            }
+        }
+
+        // Tag seçimi için filter class
+        public class TagFilter : ISelectionFilter
+        {
+            public bool AllowElement(Element elem)
+            {
+                return elem is IndependentTag;
+            }
+
+            public bool AllowReference(Reference reference, XYZ position)
+            {
+                return false;
+            }
+        }
+    }
 }
