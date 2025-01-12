@@ -188,30 +188,38 @@ namespace AlignTag
             XYZ min = cropBox.Min;
             XYZ max = cropBox.Max;
 
-            // Tag'ler arasındaki dikey mesafe
-            double verticalSpacing = 0.3; // 30 cm
+            // View'ın genişlik ve yüksekliğini hesapla
+            double viewWidth = max.X - min.X;
+            double viewHeight = max.Y - min.Y;
+
+            // Tag'ler arasındaki dikey mesafe (view yüksekliğinin %15'i)
+            double verticalSpacing = viewHeight * 0.15;
+
+            // Tag'lerin kenardan uzaklığı (view genişliğinin %20'si)
+            double edgeOffset = viewWidth * 0.20;
 
             // Tag'lerin yerleştirileceği X koordinatı
             double xPosition;
             if (side == ViewSides.Left)
             {
-                // Sol taraf için: View'ın sol kenarından tag genişliğinin 2 katı kadar içeride
-                xPosition = min.X + Math.Abs(tagLeaders[0].TagWidth) * 2;
+                // Sol taraf için: View'ın sol kenarından edgeOffset kadar içeride
+                xPosition = min.X + edgeOffset;
             }
             else
             {
-                // Sağ taraf için: View'ın sağ kenarından tag genişliğinin 2 katı kadar içeride
-                xPosition = max.X - Math.Abs(tagLeaders[0].TagWidth) * 2;
+                // Sağ taraf için: View'ın sağ kenarından edgeOffset kadar içeride
+                xPosition = max.X - edgeOffset;
             }
 
             // Tag'lerin yerleştirileceği Y koordinatlarını hesapla
             List<XYZ> points = new List<XYZ>();
-            double totalHeight = (tagLeaders.Count - 1) * verticalSpacing;
-            double startY = (max.Y + min.Y - totalHeight) / 2;
+            
+            // Başlangıç Y pozisyonunu view'ın üst kısmına yakın al
+            double startY = max.Y - (viewHeight * 0.15);  // Üstten %15 aşağıda başla
 
             for (int i = 0; i < tagLeaders.Count; i++)
             {
-                double yPosition = startY + (i * verticalSpacing);
+                double yPosition = startY - (i * verticalSpacing);
                 points.Add(new XYZ(xPosition, yPosition, 0));
             }
 
@@ -256,13 +264,22 @@ namespace AlignTag
             
             // Eğer tag'in bağlı olduğu element view'ın ortasından soldaysa, tag sağa
             // Eğer tag'in bağlı olduğu element view'ın ortasından sağdaysa, tag sola
-            if (_leaderEnd.X < viewCenter.X)
+            if (_taggedElement != null)
             {
-                _side = ViewSides.Right;  // Element solda, tag sağa
-            }
-            else
-            {
-                _side = ViewSides.Left;   // Element sağda, tag sola
+                // Element'in konumunu al
+                LocationPoint location = _taggedElement.Location as LocationPoint;
+                if (location != null)
+                {
+                    XYZ elementLocation = location.Point;
+                    if (elementLocation.X < viewCenter.X)
+                    {
+                        _side = ViewSides.Right;  // Element solda, tag sağa
+                    }
+                    else
+                    {
+                        _side = ViewSides.Left;   // Element sağda, tag sola
+                    }
+                }
             }
 
             GetTagDimension();
