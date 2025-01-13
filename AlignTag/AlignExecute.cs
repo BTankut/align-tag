@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Collections.Generic;
 using Autodesk.Revit.Attributes;
@@ -78,28 +78,6 @@ namespace AlignTag
     }
 
     [Transaction(TransactionMode.Manual)]
-    class DistributeHorizontally : IExternalCommand
-    {
-        public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
-        {
-            Align align = new Align();
-
-            return align.AlignElements(commandData, ref message, AlignType.Horizontally);
-        }
-    }
-
-    [Transaction(TransactionMode.Manual)]
-    class DistributeVertically : IExternalCommand
-    {
-        public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
-        {
-            Align align = new Align();
-
-            return align.AlignElements(commandData, ref message, AlignType.Vertically);
-        }
-    }
-
-    [Transaction(TransactionMode.Manual)]
     class UntangleVertically : IExternalCommand
     {
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
@@ -126,9 +104,9 @@ namespace AlignTag
     //{
     //    public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
     //    {
-    //        Arrange arrange = new Arrange();
+    //        AlignTag.Arrange arrange = new AlignTag.Arrange();
 
-    //        return arrange.ArrangeElements(commandData, ref message);
+    //        return arrange.Execute(commandData, ref message, elements);
     //    }
     //}
 }
