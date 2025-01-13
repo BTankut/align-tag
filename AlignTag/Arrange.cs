@@ -12,6 +12,13 @@ namespace AlignTag
 {
     public enum ViewSides { Left, Right };
 
+    public enum TagAlignment
+    {
+        AlignToBothSides,
+        AlignToLeftSide,
+        AlignToRightSide
+    }
+
     public class TagLeader
     {
         private Document _doc;
@@ -262,10 +269,41 @@ namespace AlignTag
                     return Result.Cancelled;
                 }
 
-                using (Transaction trans = new Transaction(doc))
+                // Kullanıcıya hizalama seçeneğini sor
+                TaskDialog mainDialog = new TaskDialog("Arrange Tags");
+                mainDialog.MainInstruction = "Please select alignment option:";
+                mainDialog.MainContent = "How would you like to align the selected tags?";
+                mainDialog.CommonButtons = TaskDialogCommonButtons.Ok | TaskDialogCommonButtons.Cancel;
+                
+                mainDialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink1, "Align to Both Sides", "Distribute tags evenly on both sides");
+                mainDialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink2, "Align to Left Side", "Place all tags on the left side");
+                mainDialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink3, "Align to Right Side", "Place all tags on the right side");
+                
+                TaskDialogResult result = mainDialog.Show();
+
+                if (result == TaskDialogResult.Cancel || result == TaskDialogResult.No)
                 {
-                    trans.Start("Arrange Tags");
-                    ArrangeTags(view, selectedTags);
+                    return Result.Cancelled;
+                }
+
+                TagAlignment alignment = TagAlignment.AlignToBothSides;
+                switch (result.ToString())
+                {
+                    case "CommandLink1":
+                        alignment = TagAlignment.AlignToBothSides;
+                        break;
+                    case "CommandLink2":
+                        alignment = TagAlignment.AlignToLeftSide;
+                        break;
+                    case "CommandLink3":
+                        alignment = TagAlignment.AlignToRightSide;
+                        break;
+                }
+
+                using (Transaction trans = new Transaction(doc, "Arrange Tags"))
+                {
+                    trans.Start();
+                    ArrangeTags(view, selectedTags, alignment);
                     trans.Commit();
                 }
 
@@ -282,7 +320,7 @@ namespace AlignTag
             }
         }
 
-        private void ArrangeTags(View view, List<IndependentTag> tags)
+        private void ArrangeTags(View view, List<IndependentTag> tags, TagAlignment alignment)
         {
             if (tags.Count == 0)
                 return;
@@ -295,54 +333,74 @@ namespace AlignTag
             XYZ min = cropBox.Min;
             XYZ max = cropBox.Max;
 
-            // View'ın genişlik, yükseklik ve orta noktasını hesapla
+            // View boyutlarını hesapla
             double viewWidth = max.X - min.X;
             double viewHeight = max.Y - min.Y;
             double centerX = min.X + (viewWidth / 2);
 
-            // Tag'lerin kenardan uzaklığı (view genişliğinin %5'i)
-            double edgeOffset = viewWidth * 0.05;
+            // X koordinatları için mesafeler (kenarlardan %5 içeride)
+            double margin = viewWidth * 0.05;
+            double leftX = min.X + margin;
+            double rightX = max.X - margin;
 
-            // Sol ve sağ taraf için sabit X koordinatları
-            double leftX = min.X + edgeOffset;
-            double rightX = max.X - edgeOffset;
-
-            // Tag'leri mevcut konumlarına göre grupla
+            // Tag'leri grupla ve sırala
+            var allTags = new List<IndependentTag>();
             var leftSideTags = new List<IndependentTag>();
             var rightSideTags = new List<IndependentTag>();
 
-            foreach (var tag in tags)
+            switch (alignment)
             {
-                XYZ currentPos = tag.TagHeadPosition;
-                if (currentPos.X < centerX)
-                {
-                    leftSideTags.Add(tag);
-                }
-                else
-                {
-                    rightSideTags.Add(tag);
-                }
+                case TagAlignment.AlignToBothSides:
+                    // İki yana yaslama için mevcut mantık
+                    foreach (var tag in tags)
+                    {
+                        XYZ currentPos = tag.TagHeadPosition;
+                        if (currentPos.X < centerX)
+                        {
+                            leftSideTags.Add(tag);
+                        }
+                        else
+                        {
+                            rightSideTags.Add(tag);
+                        }
+                    }
+                    break;
+
+                case TagAlignment.AlignToLeftSide:
+                    // Tüm tag'leri sol tarafa ekle
+                    leftSideTags.AddRange(tags);
+                    break;
+
+                case TagAlignment.AlignToRightSide:
+                    // Tüm tag'leri sağ tarafa ekle
+                    rightSideTags.AddRange(tags);
+                    break;
             }
 
-            // Tag'leri crop box sınırlarına olan uzaklıklarına göre sırala
-            // Sol tarafta: Sol sınıra en uzak olan en üstte
-            leftSideTags = leftSideTags.OrderByDescending(t => Math.Abs(t.TagHeadPosition.X - min.X)).ToList();
-
-            // Sağ tarafta: Sağ sınıra en uzak olan en üstte
-            rightSideTags = rightSideTags.OrderByDescending(t => Math.Abs(t.TagHeadPosition.X - max.X)).ToList();
+            // Tag'leri sırala
+            if (leftSideTags.Any())
+            {
+                leftSideTags = leftSideTags.OrderByDescending(t => Math.Abs(t.TagHeadPosition.X - min.X)).ToList();
+            }
+            if (rightSideTags.Any())
+            {
+                rightSideTags = rightSideTags.OrderByDescending(t => Math.Abs(t.TagHeadPosition.X - max.X)).ToList();
+            }
 
             // Dikey aralık ve sınırlar
             double verticalSpacing = viewHeight * 0.05;
             double startY = max.Y - (viewHeight * 0.10);  // Üstten %10 aşağıda başla
             double minYPosition = min.Y + (viewHeight * 0.10);  // Alt sınır
 
+            // Sol taraftaki tag'leri yerleştir
             double currentY = startY;
             foreach (var tag in leftSideTags)
             {
                 // Y pozisyonunu sınırlar içinde tut
-                if (currentY < minYPosition) currentY = minYPosition;
+                if (currentY < minYPosition)
+                    currentY = startY;
 
-                // Yeni tag başlık pozisyonu
+                // Yeni head pozisyonu
                 XYZ newHeadPosition = new XYZ(leftX, currentY, 0);
 
                 // Element pozisyonunu al
@@ -356,7 +414,6 @@ namespace AlignTag
                 }
                 else
                 {
-                    // Eğer LocationPoint yoksa, elementin boundingbox'ının ortasını al
                     BoundingBoxXYZ bbox = element.get_BoundingBox(view);
                     elementPosition = (bbox.Min + bbox.Max) * 0.5;
                 }
@@ -368,60 +425,49 @@ namespace AlignTag
                 }
                 else
                 {
-                    // Eğer LocationPoint yoksa, elementin boundingbox'ının ortasını al
                     BoundingBoxXYZ bbox = element.get_BoundingBox(view);
                     elementPosition = (bbox.Min + bbox.Max) * 0.5;
                 }
 #endif
 
-                // Açı hesaplama
-                double angle = Math.Abs(Math.Atan2(newHeadPosition.Y - elementPosition.Y, newHeadPosition.X - elementPosition.X));
-                double angleInDegrees = angle * (180 / Math.PI);
-
                 // Yatay mesafe ve dik çıkış mesafesi hesaplama
                 double horizontalDistance = Math.Abs(newHeadPosition.X - elementPosition.X);
                 double verticalExtension = Math.Min(Math.Max(horizontalDistance * 0.05, 5), 10);
 
-                // Eğer açı 20 dereceden fazlaysa kırılma ekle
-                XYZ elbowPosition;
-                if (angleInDegrees > 20)
-                {
-                    elbowPosition = new XYZ(
-                        elementPosition.X,
-                        elementPosition.Y + verticalExtension,
-                        0
-                    );
-                }
-                else
-                {
-                    // Açı az ise düz çizgi
-                    elbowPosition = new XYZ(
-                        elementPosition.X + ((newHeadPosition.X - elementPosition.X) * 0.5),
-                        elementPosition.Y + ((newHeadPosition.Y - elementPosition.Y) * 0.5),
-                        0
-                    );
-                }
+                // Leader ayarları
+                tag.LeaderEndCondition = LeaderEndCondition.Free;
 
-                // Pozisyonları güncelle
-                tag.TagHeadPosition = newHeadPosition;
+                // Önce leader başlangıç noktasını ayarla (elementten dik çıkış için)
+                XYZ leaderEnd = new XYZ(elementPosition.X, elementPosition.Y, 0);
 #if Version2022 || Version2023 || Version2024
-                referencedElement = tag.GetTaggedReferences().FirstOrDefault();
+                tag.SetLeaderEnd(referencedElement, leaderEnd);
+#elif Version2019 || Version2020 || Version2021
+                tag.LeaderEnd = leaderEnd;
+#endif
+
+                // Sonra kırılma noktasını ayarla
+                XYZ elbowPosition = new XYZ(elementPosition.X, elementPosition.Y + verticalExtension, 0);
+#if Version2022 || Version2023 || Version2024
                 tag.SetLeaderElbow(referencedElement, elbowPosition);
 #elif Version2019 || Version2020 || Version2021
                 tag.LeaderElbow = elbowPosition;
 #endif
 
-                // Bir sonraki tag için Y pozisyonunu güncelle
+                // Tag'i yeni pozisyona taşı
+                tag.TagHeadPosition = newHeadPosition;
+
                 currentY -= verticalSpacing;
             }
 
+            // Sağ taraftaki tag'leri yerleştir
             currentY = startY;
             foreach (var tag in rightSideTags)
             {
                 // Y pozisyonunu sınırlar içinde tut
-                if (currentY < minYPosition) currentY = minYPosition;
+                if (currentY < minYPosition)
+                    currentY = startY;
 
-                // Yeni tag başlık pozisyonu
+                // Yeni head pozisyonu
                 XYZ newHeadPosition = new XYZ(rightX, currentY, 0);
 
                 // Element pozisyonunu al
@@ -435,7 +481,6 @@ namespace AlignTag
                 }
                 else
                 {
-                    // Eğer LocationPoint yoksa, elementin boundingbox'ının ortasını al
                     BoundingBoxXYZ bbox = element.get_BoundingBox(view);
                     elementPosition = (bbox.Min + bbox.Max) * 0.5;
                 }
@@ -447,50 +492,37 @@ namespace AlignTag
                 }
                 else
                 {
-                    // Eğer LocationPoint yoksa, elementin boundingbox'ının ortasını al
                     BoundingBoxXYZ bbox = element.get_BoundingBox(view);
                     elementPosition = (bbox.Min + bbox.Max) * 0.5;
                 }
 #endif
 
-                // Açı hesaplama
-                double angle = Math.Abs(Math.Atan2(newHeadPosition.Y - elementPosition.Y, newHeadPosition.X - elementPosition.X));
-                double angleInDegrees = angle * (180 / Math.PI);
-
                 // Yatay mesafe ve dik çıkış mesafesi hesaplama
                 double horizontalDistance = Math.Abs(newHeadPosition.X - elementPosition.X);
                 double verticalExtension = Math.Min(Math.Max(horizontalDistance * 0.05, 5), 10);
 
-                // Eğer açı 20 dereceden fazlaysa kırılma ekle
-                XYZ elbowPosition;
-                if (angleInDegrees > 20)
-                {
-                    elbowPosition = new XYZ(
-                        elementPosition.X,
-                        elementPosition.Y + verticalExtension,
-                        0
-                    );
-                }
-                else
-                {
-                    // Açı az ise düz çizgi
-                    elbowPosition = new XYZ(
-                        elementPosition.X + ((newHeadPosition.X - elementPosition.X) * 0.5),
-                        elementPosition.Y + ((newHeadPosition.Y - elementPosition.Y) * 0.5),
-                        0
-                    );
-                }
+                // Leader ayarları
+                tag.LeaderEndCondition = LeaderEndCondition.Free;
 
-                // Pozisyonları güncelle
-                tag.TagHeadPosition = newHeadPosition;
+                // Önce leader başlangıç noktasını ayarla (elementten dik çıkış için)
+                XYZ leaderEnd = new XYZ(elementPosition.X, elementPosition.Y, 0);
 #if Version2022 || Version2023 || Version2024
-                referencedElement = tag.GetTaggedReferences().FirstOrDefault();
+                tag.SetLeaderEnd(referencedElement, leaderEnd);
+#elif Version2019 || Version2020 || Version2021
+                tag.LeaderEnd = leaderEnd;
+#endif
+
+                // Sonra kırılma noktasını ayarla
+                XYZ elbowPosition = new XYZ(elementPosition.X, elementPosition.Y + verticalExtension, 0);
+#if Version2022 || Version2023 || Version2024
                 tag.SetLeaderElbow(referencedElement, elbowPosition);
 #elif Version2019 || Version2020 || Version2021
                 tag.LeaderElbow = elbowPosition;
 #endif
 
-                // Bir sonraki tag için Y pozisyonunu güncelle
+                // Tag'i yeni pozisyona taşı
+                tag.TagHeadPosition = newHeadPosition;
+
                 currentY -= verticalSpacing;
             }
         }
