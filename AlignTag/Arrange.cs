@@ -313,30 +313,30 @@ namespace AlignTag
 
             foreach (var tag in tags)
             {
-                // Tag'in mevcut konumunu al
                 XYZ currentPos = tag.TagHeadPosition;
-                
-                // Tag'in X koordinatı merkez noktasından sağdaysa sağa, soldaysa sola taşı
-                if (currentPos.X >= centerX)
+                if (currentPos.X < centerX)
                 {
-                    rightSideTags.Add(tag); // Sağ taraftaysa sağda kal
+                    leftSideTags.Add(tag);
                 }
                 else
                 {
-                    leftSideTags.Add(tag); // Sol taraftaysa solda kal
+                    rightSideTags.Add(tag);
                 }
             }
 
-            // Tag'ler arasındaki dikey mesafe (view yüksekliğinin %5'i)
+            // Tag'leri crop box sınırlarına olan uzaklıklarına göre sırala
+            // Sol tarafta: Sol sınıra en uzak olan en üstte
+            leftSideTags = leftSideTags.OrderByDescending(t => Math.Abs(t.TagHeadPosition.X - min.X)).ToList();
+
+            // Sağ tarafta: Sağ sınıra en uzak olan en üstte
+            rightSideTags = rightSideTags.OrderByDescending(t => Math.Abs(t.TagHeadPosition.X - max.X)).ToList();
+
+            // Dikey aralık ve sınırlar
             double verticalSpacing = viewHeight * 0.05;
-
-            // Başlangıç Y pozisyonunu view'ın üst kısmına yakın al
             double startY = max.Y - (viewHeight * 0.10);  // Üstten %10 aşağıda başla
-
-            double currentY = startY;
             double minYPosition = min.Y + (viewHeight * 0.10);  // Alt sınır
 
-            // Sol taraftaki tag'leri yerleştir
+            double currentY = startY;
             foreach (var tag in leftSideTags)
             {
                 // Y pozisyonunu sınırlar içinde tut
@@ -415,7 +415,6 @@ namespace AlignTag
                 currentY -= verticalSpacing;
             }
 
-            // Sağ taraftaki tag'leri yerleştir
             currentY = startY;
             foreach (var tag in rightSideTags)
             {
