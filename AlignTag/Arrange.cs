@@ -287,6 +287,9 @@ namespace AlignTag
             if (tags.Count == 0)
                 return;
 
+            // Document nesnesini al
+            Document doc = view.Document;
+
             // View sınırlarını al
             BoundingBoxXYZ cropBox = view.CropBox;
             XYZ min = cropBox.Min;
@@ -330,20 +333,166 @@ namespace AlignTag
             // Başlangıç Y pozisyonunu view'ın üst kısmına yakın al
             double startY = max.Y - (viewHeight * 0.10);  // Üstten %10 aşağıda başla
 
+            double currentY = startY;
+            double minYPosition = min.Y + (viewHeight * 0.10);  // Alt sınır
+
             // Sol taraftaki tag'leri yerleştir
-            for (int i = 0; i < leftSideTags.Count; i++)
+            foreach (var tag in leftSideTags)
             {
-                var tag = leftSideTags[i];
-                double yPosition = startY - (i * verticalSpacing);
-                tag.TagHeadPosition = new XYZ(leftX, yPosition, 0);
+                // Y pozisyonunu sınırlar içinde tut
+                if (currentY < minYPosition) currentY = minYPosition;
+
+                // Yeni tag başlık pozisyonu
+                XYZ newHeadPosition = new XYZ(leftX, currentY, 0);
+
+                // Element pozisyonunu al
+                XYZ elementPosition;
+#if Version2022 || Version2023 || Version2024
+                Reference referencedElement = tag.GetTaggedReferences().FirstOrDefault();
+                Element element = doc.GetElement(referencedElement);
+                if (element.Location is LocationPoint locationPoint)
+                {
+                    elementPosition = locationPoint.Point;
+                }
+                else
+                {
+                    // Eğer LocationPoint yoksa, elementin boundingbox'ının ortasını al
+                    BoundingBoxXYZ bbox = element.get_BoundingBox(view);
+                    elementPosition = (bbox.Min + bbox.Max) * 0.5;
+                }
+#elif Version2019 || Version2020 || Version2021
+                Element element = doc.GetElement(tag.TaggedElementId);
+                if (element.Location is LocationPoint locationPoint)
+                {
+                    elementPosition = locationPoint.Point;
+                }
+                else
+                {
+                    // Eğer LocationPoint yoksa, elementin boundingbox'ının ortasını al
+                    BoundingBoxXYZ bbox = element.get_BoundingBox(view);
+                    elementPosition = (bbox.Min + bbox.Max) * 0.5;
+                }
+#endif
+
+                // Açı hesaplama
+                double angle = Math.Abs(Math.Atan2(newHeadPosition.Y - elementPosition.Y, newHeadPosition.X - elementPosition.X));
+                double angleInDegrees = angle * (180 / Math.PI);
+
+                // Yatay mesafe ve dik çıkış mesafesi hesaplama
+                double horizontalDistance = Math.Abs(newHeadPosition.X - elementPosition.X);
+                double verticalExtension = Math.Min(Math.Max(horizontalDistance * 0.05, 5), 10);
+
+                // Eğer açı 20 dereceden fazlaysa kırılma ekle
+                XYZ elbowPosition;
+                if (angleInDegrees > 20)
+                {
+                    elbowPosition = new XYZ(
+                        elementPosition.X,
+                        elementPosition.Y + verticalExtension,
+                        0
+                    );
+                }
+                else
+                {
+                    // Açı az ise düz çizgi
+                    elbowPosition = new XYZ(
+                        elementPosition.X + ((newHeadPosition.X - elementPosition.X) * 0.5),
+                        elementPosition.Y + ((newHeadPosition.Y - elementPosition.Y) * 0.5),
+                        0
+                    );
+                }
+
+                // Pozisyonları güncelle
+                tag.TagHeadPosition = newHeadPosition;
+#if Version2022 || Version2023 || Version2024
+                referencedElement = tag.GetTaggedReferences().FirstOrDefault();
+                tag.SetLeaderElbow(referencedElement, elbowPosition);
+#elif Version2019 || Version2020 || Version2021
+                tag.LeaderElbow = elbowPosition;
+#endif
+
+                // Bir sonraki tag için Y pozisyonunu güncelle
+                currentY -= verticalSpacing;
             }
 
             // Sağ taraftaki tag'leri yerleştir
-            for (int i = 0; i < rightSideTags.Count; i++)
+            currentY = startY;
+            foreach (var tag in rightSideTags)
             {
-                var tag = rightSideTags[i];
-                double yPosition = startY - (i * verticalSpacing);
-                tag.TagHeadPosition = new XYZ(rightX, yPosition, 0);
+                // Y pozisyonunu sınırlar içinde tut
+                if (currentY < minYPosition) currentY = minYPosition;
+
+                // Yeni tag başlık pozisyonu
+                XYZ newHeadPosition = new XYZ(rightX, currentY, 0);
+
+                // Element pozisyonunu al
+                XYZ elementPosition;
+#if Version2022 || Version2023 || Version2024
+                Reference referencedElement = tag.GetTaggedReferences().FirstOrDefault();
+                Element element = doc.GetElement(referencedElement);
+                if (element.Location is LocationPoint locationPoint)
+                {
+                    elementPosition = locationPoint.Point;
+                }
+                else
+                {
+                    // Eğer LocationPoint yoksa, elementin boundingbox'ının ortasını al
+                    BoundingBoxXYZ bbox = element.get_BoundingBox(view);
+                    elementPosition = (bbox.Min + bbox.Max) * 0.5;
+                }
+#elif Version2019 || Version2020 || Version2021
+                Element element = doc.GetElement(tag.TaggedElementId);
+                if (element.Location is LocationPoint locationPoint)
+                {
+                    elementPosition = locationPoint.Point;
+                }
+                else
+                {
+                    // Eğer LocationPoint yoksa, elementin boundingbox'ının ortasını al
+                    BoundingBoxXYZ bbox = element.get_BoundingBox(view);
+                    elementPosition = (bbox.Min + bbox.Max) * 0.5;
+                }
+#endif
+
+                // Açı hesaplama
+                double angle = Math.Abs(Math.Atan2(newHeadPosition.Y - elementPosition.Y, newHeadPosition.X - elementPosition.X));
+                double angleInDegrees = angle * (180 / Math.PI);
+
+                // Yatay mesafe ve dik çıkış mesafesi hesaplama
+                double horizontalDistance = Math.Abs(newHeadPosition.X - elementPosition.X);
+                double verticalExtension = Math.Min(Math.Max(horizontalDistance * 0.05, 5), 10);
+
+                // Eğer açı 20 dereceden fazlaysa kırılma ekle
+                XYZ elbowPosition;
+                if (angleInDegrees > 20)
+                {
+                    elbowPosition = new XYZ(
+                        elementPosition.X,
+                        elementPosition.Y + verticalExtension,
+                        0
+                    );
+                }
+                else
+                {
+                    // Açı az ise düz çizgi
+                    elbowPosition = new XYZ(
+                        elementPosition.X + ((newHeadPosition.X - elementPosition.X) * 0.5),
+                        elementPosition.Y + ((newHeadPosition.Y - elementPosition.Y) * 0.5),
+                        0
+                    );
+                }
+
+                // Pozisyonları güncelle
+                tag.TagHeadPosition = newHeadPosition;
+#if Version2022 || Version2023 || Version2024
+                referencedElement = tag.GetTaggedReferences().FirstOrDefault();
+                tag.SetLeaderElbow(referencedElement, elbowPosition);
+#elif Version2019 || Version2020 || Version2021
+                tag.LeaderElbow = elbowPosition;
+#endif
+
+                // Bir sonraki tag için Y pozisyonunu güncelle
+                currentY -= verticalSpacing;
             }
         }
 
