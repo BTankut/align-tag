@@ -297,8 +297,8 @@ namespace AlignTag
             double viewHeight = max.Y - min.Y;
             double centerX = min.X + (viewWidth / 2);
 
-            // Tag'lerin kenardan uzaklığı (view genişliğinin %20'si)
-            double edgeOffset = viewWidth * 0.20;
+            // Tag'lerin kenardan uzaklığı (view genişliğinin %5'i)
+            double edgeOffset = viewWidth * 0.05;
 
             // Sol ve sağ taraf için sabit X koordinatları
             double leftX = min.X + edgeOffset;
@@ -324,11 +324,11 @@ namespace AlignTag
                 }
             }
 
-            // Tag'ler arasındaki dikey mesafe (view yüksekliğinin %12'si)
-            double verticalSpacing = viewHeight * 0.12;
+            // Tag'ler arasındaki dikey mesafe (view yüksekliğinin %5'i)
+            double verticalSpacing = viewHeight * 0.05;
 
             // Başlangıç Y pozisyonunu view'ın üst kısmına yakın al
-            double startY = max.Y - (viewHeight * 0.15);  // Üstten %15 aşağıda başla
+            double startY = max.Y - (viewHeight * 0.10);  // Üstten %10 aşağıda başla
 
             // Sol taraftaki tag'leri yerleştir
             for (int i = 0; i < leftSideTags.Count; i++)
