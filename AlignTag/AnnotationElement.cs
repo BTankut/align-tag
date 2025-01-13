@@ -22,7 +22,7 @@ namespace AlignTag
 
         public XYZ DownRight { get; set; }
 
-        public Element Parent { get; set; }
+        public Element Element { get; set; }
 
         private Document _doc;
         private View _ownerView;
@@ -30,7 +30,7 @@ namespace AlignTag
         public AnnotationElement(PreparationElement preparationElement)
         {
             Element e = preparationElement.Element;
-            Parent = e;
+            Element = e;
             _doc = e.Document;
 
             if (_doc.GetElement(e.OwnerViewId) != null)
@@ -83,7 +83,7 @@ namespace AlignTag
 
         public override string ToString()
         {
-            string[] Valueparams = new string[] {Parent.Id.ToString(),
+            string[] Valueparams = new string[] {Element.Id.ToString(),
                 UpLeft.X.ToString(), UpLeft.Y.ToString(), UpLeft.Z.ToString(),
                 UpRight.X.ToString(), UpRight.Y.ToString(), UpRight.Z.ToString(),
                 DownLeft.X.ToString(), DownLeft.Y.ToString(), DownLeft.Z.ToString(),
@@ -141,7 +141,7 @@ namespace AlignTag
         public XYZ GetLeaderEnd()
         {
             XYZ LeaderEnd = this.Center;
-            Element e = this.Parent;
+            Element e = this.Element;
             //Find the leader end, if any
             if (e.GetType() == typeof(IndependentTag))
             {
@@ -192,7 +192,7 @@ namespace AlignTag
 
         public void MoveTo(XYZ point, AlignType alignType)
         {
-            if (!Parent.Pinned)
+            if (!Element.Pinned)
             {
                 XYZ displacementVector = new XYZ();
 
@@ -236,9 +236,9 @@ namespace AlignTag
                 {
                     Transform tr = Transform.CreateTranslation(_ownerView.CropBox.Transform.OfVector(displacementVector));
 
-                    if (Parent.GetType() == typeof(IndependentTag))
+                    if (Element.GetType() == typeof(IndependentTag))
                     {
-                        IndependentTag tag = Parent as IndependentTag;
+                        IndependentTag tag = Element as IndependentTag;
                         CustomLeader customLeader = new CustomLeader();
                         if (tag.HasLeader && tag.LeaderEndCondition == LeaderEndCondition.Free)
                         {
@@ -264,24 +264,67 @@ namespace AlignTag
 
                         if (tag.HasLeader && tag.LeaderEndCondition == LeaderEndCondition.Free)
                         {
-#if Version2022 || Version2023 || Version2024
-                            Reference referencedElement = tag.GetTaggedReferences().FirstOrDefault();
-                            if (referencedElement != null)
-                            {
-                                tag.SetLeaderEnd(referencedElement, customLeader.End);
-                            }
+                            // Element pozisyonunu al
+                            XYZ elementPosition;
+                            Reference referencedElement = null;
 
+#if Version2022 || Version2023 || Version2024
+                            referencedElement = tag.GetTaggedReferences().FirstOrDefault();
+                            Element taggedElement = tag.Document.GetElement(referencedElement);
+                            if (taggedElement.Location is LocationPoint locationPoint)
+                            {
+                                elementPosition = locationPoint.Point;
+                            }
+                            else
+                            {
+                                BoundingBoxXYZ bbox = taggedElement.get_BoundingBox(tag.Document.ActiveView);
+                                elementPosition = (bbox.Min + bbox.Max) * 0.5;
+                            }
 #elif Version2019 || Version2020 || Version2021
-                            tag.LeaderEnd = customLeader.End;
+                            Element taggedElement = tag.Document.GetElement(tag.TaggedElementId);
+                            if (taggedElement.Location is LocationPoint locationPoint)
+                            {
+                                elementPosition = locationPoint.Point;
+                            }
+                            else
+                            {
+                                BoundingBoxXYZ bbox = taggedElement.get_BoundingBox(tag.Document.ActiveView);
+                                elementPosition = (bbox.Min + bbox.Max) * 0.5;
+                            }
 #endif
 
+                            // Tag'i yeni pozisyona taşı
+                            tag.TagHeadPosition = point;
+
+                            // Yatay mesafe ve dik çıkış mesafesi hesaplama
+                            double horizontalDistance = Math.Abs(point.X - elementPosition.X);
+                            double verticalExtension = Math.Min(Math.Max(horizontalDistance * 0.05, 5), 10);
+
+                            // Leader ayarları
+                            tag.LeaderEndCondition = LeaderEndCondition.Free;
+
+                            // Önce leader başlangıç noktasını ayarla (elementten dik çıkış için)
+                            XYZ leaderEnd = new XYZ(elementPosition.X, elementPosition.Y, 0);
+#if Version2022 || Version2023 || Version2024
+                            tag.SetLeaderEnd(referencedElement, leaderEnd);
+#elif Version2019 || Version2020 || Version2021
+                            tag.LeaderEnd = leaderEnd;
+#endif
+
+                            // Sonra kırılma noktasını ayarla
+                            XYZ elbowPosition = new XYZ(elementPosition.X, elementPosition.Y + verticalExtension, 0);
+#if Version2022 || Version2023 || Version2024
+                            tag.SetLeaderElbow(referencedElement, elbowPosition);
+#elif Version2019 || Version2020 || Version2021
+                            tag.LeaderElbow = elbowPosition;
+#endif
                         }
 
                     }
-                    else if (Parent.GetType() == typeof(TextNote))
+                    else if (Element.GetType() == typeof(TextNote))
                     {
                         List<CustomLeader> leaders = new List<CustomLeader>();
-                        TextNote note = Parent as TextNote;
+                        TextNote note = Element as TextNote;
                         if (note.LeaderCount != 0)
                         {
                             foreach (Leader leader in note.GetLeaders())
@@ -303,9 +346,9 @@ namespace AlignTag
                             }
                         }
                     }
-                    else if (Parent.GetType().IsSubclassOf(typeof(SpatialElementTag)))
+                    else if (Element.GetType().IsSubclassOf(typeof(SpatialElementTag)))
                     {
-                        SpatialElementTag spatialElementTag = Parent as SpatialElementTag;
+                        SpatialElementTag spatialElementTag = Element as SpatialElementTag;
 
                         CustomLeader leader = null;
                         if (spatialElementTag.HasLeader)
@@ -313,7 +356,7 @@ namespace AlignTag
                             leader = new CustomLeader(spatialElementTag.LeaderEnd, new XYZ(0, 0, 0));
                         }
 
-                        Parent.Location.Move(_ownerView.CropBox.Transform.OfVector(displacementVector));
+                        Element.Location.Move(_ownerView.CropBox.Transform.OfVector(displacementVector));
 
                         if (!spatialElementTag.IsOrphaned && !spatialElementTag.HasLeader)
                         {
@@ -345,7 +388,7 @@ namespace AlignTag
                     }
                     else
                     {
-                        Parent.Location.Move(_ownerView.CropBox.Transform.OfVector(displacementVector));
+                        Element.Location.Move(_ownerView.CropBox.Transform.OfVector(displacementVector));
                     }
                 }
 
