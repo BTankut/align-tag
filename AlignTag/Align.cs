@@ -369,59 +369,190 @@ namespace AlignTag
 
                 case AlignType.Center:
                     {
-                        List<AnnotationElement> sortedAnnotationElements = annotationElements.OrderBy(x => x.UpRight.X).ToList();
-                        AnnotationElement rightAnnotation = sortedAnnotationElements.LastOrDefault();
-                        AnnotationElement leftAnnotation = sortedAnnotationElements.FirstOrDefault();
-                        double XCoord = (rightAnnotation.Center.X + leftAnnotation.Center.X) / 2;
-
-                        // Elementleri merkeze olan uzaklığa göre sırala (en yakın element en üstte)
-                        var sortedElements = annotationElements
-                            .OrderBy(ae => {
-                                if (ae.Element is IndependentTag tag)
-                                {
-                                    XYZ elementPosition = GetElementPosition(tag, document, currentView);
-                                    return Math.Abs(elementPosition.X);
-                                }
-                                return 0;
-                            })
-                            .Reverse()
+                        // 1) Soldan sağa sıralayıp en sol (leftMost) ve en sağ (rightMost) etiketleri bulalım.
+                        List<AnnotationElement> sortedAnnotationElements = annotationElements
+                            .OrderBy(x => x.UpRight.X)
                             .ToList();
 
-                        // Right ve Left ile aynı seviyede başla
-                        double currentY = annotationElements.Max(x => x.UpRight.Y);
+                        AnnotationElement leftMost = sortedAnnotationElements.FirstOrDefault();
+                        AnnotationElement rightMost = sortedAnnotationElements.LastOrDefault();
 
-                        foreach (var annotationElement in sortedElements)
+                        // 2) Yaklaşık orta X değeri
+                        double centerX = (leftMost.Center.X + rightMost.Center.X) / 2.0;
+
+                        // 3) Listeleri ayıralım: 
+                        //    - "leftList" = elemanı centerX'in solunda olanlar
+                        //    - "rightList" = elemanı centerX'in sağında olanlar
+                        //    - "centerList" = tam ortada (X ~ centerX) olanlar (isteğe bağlı)
+                        List<AnnotationElement> leftList = new List<AnnotationElement>();
+                        List<AnnotationElement> rightList = new List<AnnotationElement>();
+                        List<AnnotationElement> middleList = new List<AnnotationElement>();
+
+                        foreach (var ae in annotationElements)
                         {
-                            if (annotationElement.Element is IndependentTag tag)
+                            // Eleman bir IndependentTag ise konumunu GetElementPosition ile alalım;
+                            // değilse annotationElement.Center kullanabiliriz.
+                            XYZ pos;
+                            if (ae.Element is IndependentTag tag)
+                                pos = GetElementPosition(tag, document, currentView);
+                            else
+                                pos = ae.Center; 
+
+                            // Eşik değer (epsilon) isterseniz sıfıra yakın bir değer verebilirsiniz.
+                            double epsilon = 1e-6;
+                            double diff = pos.X - centerX;
+
+                            if (Math.Abs(diff) < epsilon)
                             {
-                                XYZ elementPosition = GetElementPosition(tag, document, currentView);
-                                XYZ newHeadPosition = new XYZ(XCoord, currentY, 0);
-                                
-                                double horizontalDistance = Math.Abs(newHeadPosition.X - elementPosition.X);
-                                double verticalExtension = Math.Min(Math.Max(horizontalDistance * 0.05, 5), 10);
+                                // Tam merkezde say
+                                middleList.Add(ae);
+                            }
+                            else if (diff < 0)
+                            {
+                                // Sol tarafta
+                                leftList.Add(ae);
+                            }
+                            else
+                            {
+                                // Sağ tarafta
+                                rightList.Add(ae);
+                            }
+                        }
+
+                        // 4) Soldaki elemanları "en uzaktan (X farkı büyük) en yakına" sıralayalım.
+                        //    'Align Right' benzeri: En uzak üstte olacak.
+                        leftList = leftList
+                            .OrderByDescending(ae => 
+                            {
+                                // Mutlak mesafesi büyük olan üste
+                                XYZ p = (ae.Element is IndependentTag t) 
+                                        ? GetElementPosition(t, document, currentView)
+                                        : ae.Center;
+                                return Math.Abs(p.X - centerX);
+                            })
+                            .ToList();
+
+                        // 5) Sağdaki elemanları da "en uzaktan en yakına" sıralayalım.
+                        //    'Align Left' benzeri: En uzak üstte olacak.
+                        rightList = rightList
+                            .OrderByDescending(ae => 
+                            {
+                                XYZ p = (ae.Element is IndependentTag t) 
+                                        ? GetElementPosition(t, document, currentView)
+                                        : ae.Center;
+                                return Math.Abs(p.X - centerX);
+                            })
+                            .ToList();
+
+                        // 6) Orta listeyi isterseniz Y değerine göre (yukarıdan aşağıya) dizmek mantıklı olabilir.
+                        middleList = middleList
+                            .OrderByDescending(ae => ae.UpRight.Y)
+                            .ToList();
+
+                        // 7) Dizilime yukarıdan başlayalım:
+                        //    En üst Y değeri, tüm annotationElements arasında en yükseğinin UpRight.Y'si olabilir.
+                        double currentY = annotationElements.Max(a => a.UpRight.Y);
+                        double verticalSpacing = 2; // Dikey boşluk
+
+                        //
+                        // -- SOLDAN GELENLERİ (Align Right mantığı) ÜSTE DİZ --
+                        //
+                        foreach (var ae in leftList)
+                        {
+                            if (ae.Element is IndependentTag tag)
+                            {
+                                XYZ elementPos = GetElementPosition(tag, document, currentView);
+                                // Tek sütunda X = centerX
+                                XYZ newHeadPosition = new XYZ(centerX, currentY, 0);
+
+                                // Leader ayarları
+                                double horizontalDistance = Math.Abs(newHeadPosition.X - elementPos.X);
+                                double verticalExtension = Math.Min(Math.Max(horizontalDistance * 0.05, 2), 10);
 
                                 tag.LeaderEndCondition = LeaderEndCondition.Free;
-                                XYZ leaderEnd = new XYZ(elementPosition.X, elementPosition.Y, 0);
 #if Version2022 || Version2023 || Version2024
                                 Reference referencedElement = tag.GetTaggedReferences().FirstOrDefault();
-                                tag.SetLeaderEnd(referencedElement, leaderEnd);
+                                tag.SetLeaderEnd(referencedElement, new XYZ(elementPos.X, elementPos.Y, 0));
+                                tag.SetLeaderElbow(referencedElement, new XYZ(elementPos.X, elementPos.Y + verticalExtension, 0));
 #elif Version2019 || Version2020 || Version2021
-                                tag.LeaderEnd = leaderEnd;
+                                tag.LeaderEnd = new XYZ(elementPos.X, elementPos.Y, 0);
+                                tag.LeaderElbow = new XYZ(elementPos.X, elementPos.Y + verticalExtension, 0);
 #endif
-                                XYZ elbowPosition = new XYZ(elementPosition.X, elementPosition.Y + verticalExtension, 0);
+                                // Tag'i yeni pozisyona taşı
+                                tag.TagHeadPosition = newHeadPosition;
+                            }
+                            else
+                            {
+                                // TextNote vb.
+                                ae.MoveTo(new XYZ(centerX, currentY, 0), AlignType.Center);
+                            }
+
+                            currentY -= verticalSpacing;
+                        }
+
+                        //
+                        // -- SAĞDAN GELENLERİ (Align Left mantığı) SOL LİSTENİN ALTINA DEVAM --
+                        //
+                        foreach (var ae in rightList)
+                        {
+                            if (ae.Element is IndependentTag tag)
+                            {
+                                XYZ elementPos = GetElementPosition(tag, document, currentView);
+                                // Tek sütunda X = centerX
+                                XYZ newHeadPosition = new XYZ(centerX, currentY, 0);
+
+                                double horizontalDistance = Math.Abs(newHeadPosition.X - elementPos.X);
+                                double verticalExtension = Math.Min(Math.Max(horizontalDistance * 0.05, 2), 10);
+
+                                tag.LeaderEndCondition = LeaderEndCondition.Free;
 #if Version2022 || Version2023 || Version2024
-                                tag.SetLeaderElbow(referencedElement, elbowPosition);
+                                Reference referencedElement = tag.GetTaggedReferences().FirstOrDefault();
+                                tag.SetLeaderEnd(referencedElement, new XYZ(elementPos.X, elementPos.Y, 0));
+                                tag.SetLeaderElbow(referencedElement, new XYZ(elementPos.X, elementPos.Y + verticalExtension, 0));
 #elif Version2019 || Version2020 || Version2021
-                                tag.LeaderElbow = elbowPosition;
+                                tag.LeaderEnd = new XYZ(elementPos.X, elementPos.Y, 0);
+                                tag.LeaderElbow = new XYZ(elementPos.X, elementPos.Y + verticalExtension, 0);
 #endif
                                 tag.TagHeadPosition = newHeadPosition;
                             }
                             else
                             {
-                                XYZ resultingPoint = new XYZ(XCoord, currentY, 0);
-                                annotationElement.MoveTo(resultingPoint, AlignType.Center);
+                                ae.MoveTo(new XYZ(centerX, currentY, 0), AlignType.Center);
                             }
-                            currentY -= 2;
+
+                            currentY -= verticalSpacing;
+                        }
+
+                        //
+                        // -- ORTADA KALAN (centerList) ETİKETLERİ EN SON YERLEŞTİR --
+                        //
+                        foreach (var ae in middleList)
+                        {
+                            if (ae.Element is IndependentTag tag)
+                            {
+                                XYZ elementPos = GetElementPosition(tag, document, currentView);
+                                XYZ newHeadPosition = new XYZ(centerX, currentY, 0);
+
+                                double horizontalDistance = Math.Abs(newHeadPosition.X - elementPos.X);
+                                double verticalExtension = Math.Min(Math.Max(horizontalDistance * 0.05, 2), 10);
+
+                                tag.LeaderEndCondition = LeaderEndCondition.Free;
+#if Version2022 || Version2023 || Version2024
+                                Reference referencedElement = tag.GetTaggedReferences().FirstOrDefault();
+                                tag.SetLeaderEnd(referencedElement, new XYZ(elementPos.X, elementPos.Y, 0));
+                                tag.SetLeaderElbow(referencedElement, new XYZ(elementPos.X, elementPos.Y + verticalExtension, 0));
+#elif Version2019 || Version2020 || Version2021
+                                tag.LeaderEnd = new XYZ(elementPos.X, elementPos.Y, 0);
+                                tag.LeaderElbow = new XYZ(elementPos.X, elementPos.Y + verticalExtension, 0);
+#endif
+                                tag.TagHeadPosition = newHeadPosition;
+                            }
+                            else
+                            {
+                                ae.MoveTo(new XYZ(centerX, currentY, 0), AlignType.Center);
+                            }
+
+                            currentY -= verticalSpacing;
                         }
                     }
                     break;
