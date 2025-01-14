@@ -262,7 +262,7 @@ namespace AlignTag
 
                                 // Leader hesaplamaları
                                 double horizontalDistance = Math.Abs(newHeadPosition.X - elementPosition.X);
-                                double verticalExtension = Math.Min(Math.Max(horizontalDistance * 0.05, 5), 10);
+                                double verticalExtension = Math.Min(Math.Max(horizontalDistance * 0.05, 2), 10);
 
                                 tag.LeaderEndCondition = LeaderEndCondition.Free;
                                 XYZ leaderEnd = new XYZ(elementPosition.X, elementPosition.Y, 0);
@@ -330,7 +330,7 @@ namespace AlignTag
                                 
                                 // Yatay mesafe ve dik çıkış mesafesi hesaplama
                                 double horizontalDistance = Math.Abs(newHeadPosition.X - elementPosition.X);
-                                double verticalExtension = Math.Min(Math.Max(horizontalDistance * 0.05, 5), 10);
+                                double verticalExtension = Math.Min(Math.Max(horizontalDistance * 0.05, 2), 10);
 
                                 // Leader ayarları
                                 tag.LeaderEndCondition = LeaderEndCondition.Free;
