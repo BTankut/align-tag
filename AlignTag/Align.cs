@@ -226,109 +226,107 @@ namespace AlignTag
             {
                 case AlignType.Left:
                     {
+                        // En soldaki tag'i bul
                         AnnotationElement farthestAnnotation =
-                            annotationElements.OrderBy(x => x.UpLeft.X).FirstOrDefault();
-                        foreach (AnnotationElement annotationElement in annotationElements)
+                            annotationElements.OrderBy(x => x.UpRight.X).FirstOrDefault();
+
+                        double alignLineX = farthestAnnotation.UpLeft.X;
+
+                        // Elementleri merkeze olan uzaklığa göre sırala 
+                        // (ve Align Right'taki gibi davranması için .Reverse() ekle)
+                        var sortedElements = annotationElements
+                            .OrderByDescending(ae => 
+                            {
+                                if (ae.Element is IndependentTag tag)
+                                {
+                                    XYZ elementPosition = GetElementPosition(tag, document, currentView);
+                                    // Sol çizgiye olan mutlak uzaklık
+                                    return Math.Abs(elementPosition.X - alignLineX);
+                                }
+                                return 0;
+                            })
+                            .ToList();
+
+                        // En üstteki tag'den başla (Align Right'ta olduğu gibi)
+                        double currentY = sortedElements.First().UpRight.Y;
+                        double verticalSpacing = 2; // her bir sonraki etiketi 2 birim alta yerleştireceğiz
+
+                        foreach (var annotationElement in sortedElements)
                         {
                             if (annotationElement.Element is IndependentTag tag)
                             {
-                                XYZ elementPosition;
-#if Version2022 || Version2023 || Version2024
-                                Reference referencedElement = tag.GetTaggedReferences().FirstOrDefault();
-                                Element element = document.GetElement(referencedElement);
-                                if (element.Location is LocationPoint locationPoint)
-                                {
-                                    elementPosition = locationPoint.Point;
-                                }
-                                else
-                                {
-                                    BoundingBoxXYZ bbox = element.get_BoundingBox(currentView);
-                                    elementPosition = (bbox.Min + bbox.Max) * 0.5;
-                                }
-#elif Version2019 || Version2020 || Version2021
-                                Element element = document.GetElement(tag.TaggedElementId);
-                                if (element.Location is LocationPoint locationPoint)
-                                {
-                                    elementPosition = locationPoint.Point;
-                                }
-                                else
-                                {
-                                    BoundingBoxXYZ bbox = element.get_BoundingBox(currentView);
-                                    elementPosition = (bbox.Min + bbox.Max) * 0.5;
-                                }
-#endif
-                                // Yeni head pozisyonu
-                                XYZ newHeadPosition = new XYZ(farthestAnnotation.UpLeft.X, annotationElement.UpLeft.Y, 0);
+                                XYZ elementPosition = GetElementPosition(tag, document, currentView);
                                 
-                                // Yatay mesafe ve dik çıkış mesafesi hesaplama
+                                // Tag'in baş pozisyonu (head) soldaki hizalama çizgisinde
+                                XYZ newHeadPosition = new XYZ(alignLineX, currentY, 0);
+
+                                // Leader hesaplamaları
                                 double horizontalDistance = Math.Abs(newHeadPosition.X - elementPosition.X);
                                 double verticalExtension = Math.Min(Math.Max(horizontalDistance * 0.05, 5), 10);
 
-                                // Leader ayarları
                                 tag.LeaderEndCondition = LeaderEndCondition.Free;
-
-                                // Önce leader başlangıç noktasını ayarla (elementten dik çıkış için)
                                 XYZ leaderEnd = new XYZ(elementPosition.X, elementPosition.Y, 0);
 #if Version2022 || Version2023 || Version2024
+                                Reference referencedElement = tag.GetTaggedReferences().FirstOrDefault();
                                 tag.SetLeaderEnd(referencedElement, leaderEnd);
 #elif Version2019 || Version2020 || Version2021
                                 tag.LeaderEnd = leaderEnd;
 #endif
 
-                                // Sonra kırılma noktasını ayarla
-                                XYZ elbowPosition = new XYZ(elementPosition.X, elementPosition.Y + verticalExtension, 0);
+                                XYZ elbowPosition = new XYZ(elementPosition.X, 
+                                                            elementPosition.Y + verticalExtension,
+                                                            0);
 #if Version2022 || Version2023 || Version2024
                                 tag.SetLeaderElbow(referencedElement, elbowPosition);
 #elif Version2019 || Version2020 || Version2021
                                 tag.LeaderElbow = elbowPosition;
 #endif
 
-                                // Tag'i yeni pozisyona taşı
+                                // Tag head'i yeni konuma yerleştir
                                 tag.TagHeadPosition = newHeadPosition;
                             }
                             else
                             {
-                                XYZ resultingPoint = new XYZ(farthestAnnotation.UpLeft.X, annotationElement.UpLeft.Y, 0);
+                                // TextNote vb. ise
+                                XYZ resultingPoint = new XYZ(alignLineX, currentY, 0);
                                 annotationElement.MoveTo(resultingPoint, AlignType.Left);
                             }
+                            currentY -= verticalSpacing;
                         }
                     }
                     break;
+
                 case AlignType.Right:
                     {
+                        // En sağdaki tag'i bul
                         AnnotationElement farthestAnnotation =
                             annotationElements.OrderByDescending(x => x.UpRight.X).FirstOrDefault();
-                        foreach (AnnotationElement annotationElement in annotationElements)
+
+                        // Elementleri merkeze olan uzaklığa göre sırala (en yakın element en üstte)
+                        var sortedElements = annotationElements
+                            .OrderBy(ae => { // OrderBy kullanarak en yakından uzağa sıralıyoruz
+                                if (ae.Element is IndependentTag tag)
+                                {
+                                    XYZ elementPosition = GetElementPosition(tag, document, currentView);
+                                    return Math.Abs(elementPosition.X);
+                                }
+                                return 0;
+                            })
+                            .Reverse() // Listeyi ters çeviriyoruz, böylece en uzak element en üstte olacak
+                            .ToList();
+
+                        // En üstteki tag'den başla
+                        double currentY = sortedElements.First().UpRight.Y;
+                        double verticalSpacing = 2; // Tag'ler arası mesafe
+
+                        foreach (var annotationElement in sortedElements)
                         {
                             if (annotationElement.Element is IndependentTag tag)
                             {
-                                XYZ elementPosition;
-#if Version2022 || Version2023 || Version2024
-                                Reference referencedElement = tag.GetTaggedReferences().FirstOrDefault();
-                                Element element = document.GetElement(referencedElement);
-                                if (element.Location is LocationPoint locationPoint)
-                                {
-                                    elementPosition = locationPoint.Point;
-                                }
-                                else
-                                {
-                                    BoundingBoxXYZ bbox = element.get_BoundingBox(currentView);
-                                    elementPosition = (bbox.Min + bbox.Max) * 0.5;
-                                }
-#elif Version2019 || Version2020 || Version2021
-                                Element element = document.GetElement(tag.TaggedElementId);
-                                if (element.Location is LocationPoint locationPoint)
-                                {
-                                    elementPosition = locationPoint.Point;
-                                }
-                                else
-                                {
-                                    BoundingBoxXYZ bbox = element.get_BoundingBox(currentView);
-                                    elementPosition = (bbox.Min + bbox.Max) * 0.5;
-                                }
-#endif
+                                XYZ elementPosition = GetElementPosition(tag, document, currentView);
+
                                 // Yeni head pozisyonu
-                                XYZ newHeadPosition = new XYZ(farthestAnnotation.UpRight.X, annotationElement.UpRight.Y, 0);
+                                XYZ newHeadPosition = new XYZ(farthestAnnotation.UpRight.X, currentY, 0);
                                 
                                 // Yatay mesafe ve dik çıkış mesafesi hesaplama
                                 double horizontalDistance = Math.Abs(newHeadPosition.X - elementPosition.X);
@@ -340,6 +338,7 @@ namespace AlignTag
                                 // Önce leader başlangıç noktasını ayarla (elementten dik çıkış için)
                                 XYZ leaderEnd = new XYZ(elementPosition.X, elementPosition.Y, 0);
 #if Version2022 || Version2023 || Version2024
+                                Reference referencedElement = tag.GetTaggedReferences().FirstOrDefault();
                                 tag.SetLeaderEnd(referencedElement, leaderEnd);
 #elif Version2019 || Version2020 || Version2021
                                 tag.LeaderEnd = leaderEnd;
@@ -358,12 +357,75 @@ namespace AlignTag
                             }
                             else
                             {
-                                XYZ resultingPoint = new XYZ(farthestAnnotation.UpRight.X, annotationElement.UpRight.Y, 0);
+                                XYZ resultingPoint = new XYZ(farthestAnnotation.UpRight.X, currentY, 0);
                                 annotationElement.MoveTo(resultingPoint, AlignType.Right);
                             }
+
+                            // Y pozisyonunu aşağı doğru güncelle
+                            currentY -= verticalSpacing;
                         }
                     }
                     break;
+
+                case AlignType.Center:
+                    {
+                        List<AnnotationElement> sortedAnnotationElements = annotationElements.OrderBy(x => x.UpRight.X).ToList();
+                        AnnotationElement rightAnnotation = sortedAnnotationElements.LastOrDefault();
+                        AnnotationElement leftAnnotation = sortedAnnotationElements.FirstOrDefault();
+                        double XCoord = (rightAnnotation.Center.X + leftAnnotation.Center.X) / 2;
+
+                        // Elementleri merkeze olan uzaklığa göre sırala (en yakın element en üstte)
+                        var sortedElements = annotationElements
+                            .OrderBy(ae => {
+                                if (ae.Element is IndependentTag tag)
+                                {
+                                    XYZ elementPosition = GetElementPosition(tag, document, currentView);
+                                    return Math.Abs(elementPosition.X);
+                                }
+                                return 0;
+                            })
+                            .Reverse()
+                            .ToList();
+
+                        // Right ve Left ile aynı seviyede başla
+                        double currentY = annotationElements.Max(x => x.UpRight.Y);
+
+                        foreach (var annotationElement in sortedElements)
+                        {
+                            if (annotationElement.Element is IndependentTag tag)
+                            {
+                                XYZ elementPosition = GetElementPosition(tag, document, currentView);
+                                XYZ newHeadPosition = new XYZ(XCoord, currentY, 0);
+                                
+                                double horizontalDistance = Math.Abs(newHeadPosition.X - elementPosition.X);
+                                double verticalExtension = Math.Min(Math.Max(horizontalDistance * 0.05, 5), 10);
+
+                                tag.LeaderEndCondition = LeaderEndCondition.Free;
+                                XYZ leaderEnd = new XYZ(elementPosition.X, elementPosition.Y, 0);
+#if Version2022 || Version2023 || Version2024
+                                Reference referencedElement = tag.GetTaggedReferences().FirstOrDefault();
+                                tag.SetLeaderEnd(referencedElement, leaderEnd);
+#elif Version2019 || Version2020 || Version2021
+                                tag.LeaderEnd = leaderEnd;
+#endif
+                                XYZ elbowPosition = new XYZ(elementPosition.X, elementPosition.Y + verticalExtension, 0);
+#if Version2022 || Version2023 || Version2024
+                                tag.SetLeaderElbow(referencedElement, elbowPosition);
+#elif Version2019 || Version2020 || Version2021
+                                tag.LeaderElbow = elbowPosition;
+#endif
+                                tag.TagHeadPosition = newHeadPosition;
+                            }
+                            else
+                            {
+                                XYZ resultingPoint = new XYZ(XCoord, currentY, 0);
+                                annotationElement.MoveTo(resultingPoint, AlignType.Center);
+                            }
+                            currentY -= 2;
+                        }
+                    }
+                    break;
+
                 case AlignType.Up:
                     {
                         AnnotationElement farthestAnnotation =
@@ -382,78 +444,6 @@ namespace AlignTag
                         {
                             XYZ resultingPoint = new XYZ(annotationElement.Center.X, farthestAnnotation.UpRight.Y, 0);
                             annotationElement.MoveTo(resultingPoint, AlignType.Down);
-                        }
-                    }
-                    break;
-                case AlignType.Center:
-                    {
-                        List<AnnotationElement> sortedAnnotationElements = annotationElements.OrderBy(x => x.UpRight.X).ToList();
-                        AnnotationElement rightAnnotation = sortedAnnotationElements.LastOrDefault();
-                        AnnotationElement leftAnnotation = sortedAnnotationElements.FirstOrDefault();
-                        double XCoord = (rightAnnotation.Center.X + leftAnnotation.Center.X) / 2;
-                        foreach (AnnotationElement annotationElement in sortedAnnotationElements)
-                        {
-                            if (annotationElement.Element is IndependentTag tag)
-                            {
-                                XYZ elementPosition;
-#if Version2022 || Version2023 || Version2024
-                                Reference referencedElement = tag.GetTaggedReferences().FirstOrDefault();
-                                Element element = document.GetElement(referencedElement);
-                                if (element.Location is LocationPoint locationPoint)
-                                {
-                                    elementPosition = locationPoint.Point;
-                                }
-                                else
-                                {
-                                    BoundingBoxXYZ bbox = element.get_BoundingBox(currentView);
-                                    elementPosition = (bbox.Min + bbox.Max) * 0.5;
-                                }
-#elif Version2019 || Version2020 || Version2021
-                                Element element = document.GetElement(tag.TaggedElementId);
-                                if (element.Location is LocationPoint locationPoint)
-                                {
-                                    elementPosition = locationPoint.Point;
-                                }
-                                else
-                                {
-                                    BoundingBoxXYZ bbox = element.get_BoundingBox(currentView);
-                                    elementPosition = (bbox.Min + bbox.Max) * 0.5;
-                                }
-#endif
-                                // Yeni head pozisyonu
-                                XYZ newHeadPosition = new XYZ(XCoord, annotationElement.Center.Y, 0);
-                                
-                                // Yatay mesafe ve dik çıkış mesafesi hesaplama
-                                double horizontalDistance = Math.Abs(newHeadPosition.X - elementPosition.X);
-                                double verticalExtension = Math.Min(Math.Max(horizontalDistance * 0.05, 5), 10);
-
-                                // Leader ayarları
-                                tag.LeaderEndCondition = LeaderEndCondition.Free;
-
-                                // Önce leader başlangıç noktasını ayarla (elementten dik çıkış için)
-                                XYZ leaderEnd = new XYZ(elementPosition.X, elementPosition.Y, 0);
-#if Version2022 || Version2023 || Version2024
-                                tag.SetLeaderEnd(referencedElement, leaderEnd);
-#elif Version2019 || Version2020 || Version2021
-                                tag.LeaderEnd = leaderEnd;
-#endif
-
-                                // Sonra kırılma noktasını ayarla
-                                XYZ elbowPosition = new XYZ(elementPosition.X, elementPosition.Y + verticalExtension, 0);
-#if Version2022 || Version2023 || Version2024
-                                tag.SetLeaderElbow(referencedElement, elbowPosition);
-#elif Version2019 || Version2020 || Version2021
-                                tag.LeaderElbow = elbowPosition;
-#endif
-
-                                // Tag'i yeni pozisyona taşı
-                                tag.TagHeadPosition = newHeadPosition;
-                            }
-                            else
-                            {
-                                XYZ resultingPoint = new XYZ(XCoord, annotationElement.Center.Y, 0);
-                                annotationElement.MoveTo(resultingPoint, AlignType.Center);
-                            }
                         }
                     }
                     break;
@@ -527,6 +517,28 @@ namespace AlignTag
                 default:
                     return "Align";
             }
+        }
+
+        private XYZ GetElementPosition(IndependentTag tag, Document document, View view)
+        {
+            XYZ elementPosition;
+#if Version2022 || Version2023 || Version2024
+            Reference referencedElement = tag.GetTaggedReferences().FirstOrDefault();
+            Element element = document.GetElement(referencedElement);
+#elif Version2019 || Version2020 || Version2021
+            Element element = document.GetElement(tag.TaggedElementId);
+#endif
+            if (element.Location is LocationPoint locationPoint)
+            {
+                elementPosition = locationPoint.Point;
+            }
+            else
+            {
+                BoundingBoxXYZ bbox = element.get_BoundingBox(view);
+                elementPosition = (bbox.Min + bbox.Max) * 0.5;
+            }
+
+            return elementPosition;
         }
     }
 }
