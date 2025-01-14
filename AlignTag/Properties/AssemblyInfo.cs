@@ -6,11 +6,11 @@ using System.Runtime.InteropServices;
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [assembly: AssemblyTitle("AlignTag")]
-[assembly: AssemblyDescription("Align Tags in Revit")]
+[assembly: AssemblyDescription("Revit için Etiket Hizalama Eklentisi")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("BIM 42")]
+[assembly: AssemblyCompany("BT")]
 [assembly: AssemblyProduct("Revit Add-In AlignTag")]
-[assembly: AssemblyCopyright("")]
+[assembly: AssemblyCopyright("Copyright 2025 BT")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
