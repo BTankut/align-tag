@@ -1,0 +1,17 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Revit 2022 Debug",
+            "type": "clr",
+            "request": "launch",
+            "preLaunchTask": "build-2022Debug",
+            "program": "C:\\Program Files\\Autodesk\\Revit 2022\\Revit.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": false,
+            "console": "internalConsole",
+            "justMyCode": false
+        }
+    ]
+}

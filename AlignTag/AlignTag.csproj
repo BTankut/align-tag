@@ -271,10 +271,21 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="AfterClean">
-    <Delete Files="$(AppData)\Autodesk\REVIT\Addins\2016\AlignTag.addin" />
-    <Delete Files="$(AppData)\Autodesk\REVIT\Addins\2016\AlignTag.dll" />
+    <Delete Files="$(AppData)\Autodesk\REVIT\Addins\2022\AlignTag.addin" />
+    <Delete Files="$(AppData)\Autodesk\REVIT\Addins\2022\AlignTag.dll" />
   </Target>
-  <PropertyGroup>
-    <PostBuildEvent>powershell -ExecutionPolicy Unrestricted $(ProjectDir)PostBuild.ps1 -Configuration $(Configuration) -TargetName $(TargetName) -ProjectDir $(ProjectDir) -TargetPath $(TargetPath) -TargetDir $(TargetDir)</PostBuildEvent>
-  </PropertyGroup>
+  <Target Name="AfterBuild">
+    <PropertyGroup>
+      <RevitAddInDir>$(AppData)\Autodesk\REVIT\Addins\2022</RevitAddInDir>
+      <RevitAddInDllDir>$(RevitAddInDir)\$(TargetName)</RevitAddInDllDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <DllFiles Include="$(TargetDir)$(TargetName).dll" />
+      <AddinFile Include="$(ProjectDir)$(TargetName).addin" />
+    </ItemGroup>
+    <RemoveDir Directories="$(RevitAddInDllDir)" />
+    <MakeDir Directories="$(RevitAddInDllDir)" />
+    <Copy SourceFiles="@(DllFiles)" DestinationFolder="$(RevitAddInDllDir)" />
+    <Copy SourceFiles="@(AddinFile)" DestinationFolder="$(RevitAddInDir)" />
+  </Target>
 </Project>

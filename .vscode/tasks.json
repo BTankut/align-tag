@@ -1,0 +1,42 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build-2022Debug",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/AlignTag.sln",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary",
+                "/p:Configuration=2022Debug"
+            ],
+            "problemMatcher": "$msCompile",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "dependsOn": ["clean-revit-folder"]
+        },
+        {
+            "label": "clean-revit-folder",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-Command",
+                "if (Test-Path \"$env:APPDATA\\Autodesk\\Revit\\Addins\\2022\\AlignTag\") { Remove-Item -Path \"$env:APPDATA\\Autodesk\\Revit\\Addins\\2022\\AlignTag\" -Recurse -Force }; if (Test-Path \"$env:APPDATA\\Autodesk\\Revit\\Addins\\2022\\AlignTag.addin\") { Remove-Item -Path \"$env:APPDATA\\Autodesk\\Revit\\Addins\\2022\\AlignTag.addin\" -Force }"
+            ]
+        },
+        {
+            "label": "copy-to-revit",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-Command",
+                "$revitAddinPath = \"$env:APPDATA\\Autodesk\\Revit\\Addins\\2022\\AlignTag\"; New-Item -ItemType Directory -Force -Path $revitAddinPath; Copy-Item \"${workspaceFolder}\\AlignTag\\bin\\2022Debug\\AlignTag.dll\" -Destination $revitAddinPath; Copy-Item \"${workspaceFolder}\\AlignTag\\AlignTag.addin\" -Destination \"$env:APPDATA\\Autodesk\\Revit\\Addins\\2022\""
+            ],
+            "dependsOn": ["build-2022Debug"]
+        }
+    ]
+}
