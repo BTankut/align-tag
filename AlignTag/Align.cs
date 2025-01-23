@@ -14,8 +14,8 @@ namespace AlignTag
 {
     public class Align
     {
-        private UIDocument UIdoc;
-        public Result AlignElements(ExternalCommandData commandData, ref string message, AlignType alignType)
+        private Autodesk.Revit.UI.UIDocument UIdoc;
+        public Autodesk.Revit.UI.Result AlignElements(Autodesk.Revit.UI.ExternalCommandData commandData, ref string message, AlignType alignType)
         {
             // Get the handle of current document.
             UIdoc = commandData.Application.ActiveUIDocument;
@@ -33,7 +33,7 @@ namespace AlignTag
                     {
                         empty = true;
 
-                        IList<Reference> selectedReferences = UIdoc.Selection.PickObjects(ObjectType.Element, "Pick elements to be aligned");
+                        IList<Reference> selectedReferences = UIdoc.Selection.PickObjects(Autodesk.Revit.UI.Selection.ObjectType.Element, "Pick elements to be aligned");
                         selectedIds = Tools.RevitReferencesToElementIds(document, selectedReferences);
                         UIdoc.Selection.SetElementIds(selectedIds);
                     }
@@ -46,7 +46,7 @@ namespace AlignTag
                     UIdoc.Selection.SetElementIds(selectedIds);
 
                     // Return Success
-                    return Result.Succeeded;
+                    return Autodesk.Revit.UI.Result.Succeeded;
                 }
 
                 catch (Autodesk.Revit.Exceptions.OperationCanceledException exceptionCanceled)
@@ -57,7 +57,7 @@ namespace AlignTag
                     {
                         txg.RollBack();
                     }
-                    return Result.Cancelled;
+                    return Autodesk.Revit.UI.Result.Cancelled;
                 }
                 catch (ErrorMessageException errorEx)
                 {
@@ -67,7 +67,7 @@ namespace AlignTag
                     {
                         txg.RollBack();
                     }
-                    return Result.Failed;
+                    return Autodesk.Revit.UI.Result.Failed;
                 }
                 catch (Exception ex)
                 {
@@ -78,7 +78,7 @@ namespace AlignTag
                     {
                         txg.RollBack();
                     }
-                    return Result.Failed;
+                    return Autodesk.Revit.UI.Result.Failed;
                 }
             }
         }
@@ -159,7 +159,7 @@ namespace AlignTag
                     double verticalExtension = Math.Min(Math.Max(horizontalDistance * 0.05, 5), 10);
 
                     // Leader ayarları
-                    tag.LeaderEndCondition = LeaderEndCondition.Free;
+                    tag.LeaderEndCondition = Autodesk.Revit.DB.LeaderEndCondition.Free;
 
                     // Önce leader başlangıç noktasını ayarla (elementten dik çıkış için)
                     XYZ leaderEnd = new XYZ(elementPosition.X, elementPosition.Y, 0);
@@ -264,7 +264,7 @@ namespace AlignTag
                                 double horizontalDistance = Math.Abs(newHeadPosition.X - elementPosition.X);
                                 double verticalExtension = Math.Min(Math.Max(horizontalDistance * 0.05, 2), 10);
 
-                                tag.LeaderEndCondition = LeaderEndCondition.Free;
+                                tag.LeaderEndCondition = Autodesk.Revit.DB.LeaderEndCondition.Free;
                                 XYZ leaderEnd = new XYZ(elementPosition.X, elementPosition.Y, 0);
 #if Version2022 || Version2023 || Version2024
                                 Reference referencedElement = tag.GetTaggedReferences().FirstOrDefault();
@@ -333,7 +333,7 @@ namespace AlignTag
                                 double verticalExtension = Math.Min(Math.Max(horizontalDistance * 0.05, 2), 10);
 
                                 // Leader ayarları
-                                tag.LeaderEndCondition = LeaderEndCondition.Free;
+                                tag.LeaderEndCondition = Autodesk.Revit.DB.LeaderEndCondition.Free;
 
                                 // Önce leader başlangıç noktasını ayarla (elementten dik çıkış için)
                                 XYZ leaderEnd = new XYZ(elementPosition.X, elementPosition.Y, 0);
@@ -519,7 +519,7 @@ namespace AlignTag
                                 double horizontalDistance = Math.Abs(newHeadPos.X - pos.X);
                                 double verticalExtension = Math.Min(Math.Max(horizontalDistance * 0.05, 2), 10);
 
-                                tag.LeaderEndCondition = LeaderEndCondition.Free;
+                                tag.LeaderEndCondition = Autodesk.Revit.DB.LeaderEndCondition.Free;
 #if Version2022 || Version2023 || Version2024
                                 Reference referencedElement = tag.GetTaggedReferences().FirstOrDefault();
                                 tag.SetLeaderEnd(referencedElement, new XYZ(pos.X, pos.Y, 0));
@@ -548,7 +548,7 @@ namespace AlignTag
                                 double horizontalDistance = Math.Abs(newHeadPos.X - pos.X);
                                 double verticalExtension = Math.Min(Math.Max(horizontalDistance * 0.05, 2), 10);
 
-                                tag.LeaderEndCondition = LeaderEndCondition.Free;
+                                tag.LeaderEndCondition = Autodesk.Revit.DB.LeaderEndCondition.Free;
 #if Version2022 || Version2023 || Version2024
                                 Reference referencedElement = tag.GetTaggedReferences().FirstOrDefault();
                                 tag.SetLeaderEnd(referencedElement, new XYZ(pos.X, pos.Y, 0));
@@ -577,7 +577,7 @@ namespace AlignTag
                                 double horizontalDistance = Math.Abs(newHeadPos.X - pos.X);
                                 double verticalExtension = Math.Min(Math.Max(horizontalDistance * 0.05, 2), 10);
 
-                                tag.LeaderEndCondition = LeaderEndCondition.Free;
+                                tag.LeaderEndCondition = Autodesk.Revit.DB.LeaderEndCondition.Free;
 #if Version2022 || Version2023 || Version2024
                                 Reference referencedElement = tag.GetTaggedReferences().FirstOrDefault();
                                 tag.SetLeaderEnd(referencedElement, new XYZ(pos.X, pos.Y, 0));

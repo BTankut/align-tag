@@ -167,11 +167,11 @@
       <Private>False</Private>
     </Reference>
     <!-- 2022 -->
-    <Reference Include="RevitAPI" Condition="'$(Configuration)' == '2022Debug' OR '$(Configuration)' == '2022Release'">
+    <Reference Include="RevitAPI">
       <HintPath>C:\Program Files\Autodesk\Revit 2022\RevitAPI.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="RevitAPIUI" Condition="'$(Configuration)' == '2022Debug' OR '$(Configuration)' == '2022Release'">
+    <Reference Include="RevitAPIUI">
       <HintPath>C:\Program Files\Autodesk\Revit 2022\RevitAPIUI.dll</HintPath>
       <Private>False</Private>
     </Reference>
@@ -222,6 +222,7 @@
     <Compile Include="AnnotationElement.cs" />
     <Compile Include="App.cs" />
     <Compile Include="Arrange.cs" />
+    <Compile Include="AutoTag.cs" />
     <Compile Include="Distribute.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Properties\Resources.Designer.cs">

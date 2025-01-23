@@ -124,8 +124,15 @@ namespace AlignTag
 
             bim42Panel.AddStackedItems(alignLeftButton, alignCenterButton, alignRightButton);
             bim42Panel.AddStackedItems(alignTopButton, alignMiddleButton, alignBottomButton);
+            //Add Auto Tag Button
+            PushButtonData autoTagButton = new PushButtonData("AutoTagButton", "Auto\nTag", DllPath, "AlignTag.AutoTagCommand");
+            autoTagButton.ToolTip = "Automatically add tags to selected elements";
+            autoTagButton.LargeImage = RetriveImage("AlignTag.Resources.arrange-large.png");
+            autoTagButton.Image = RetriveImage("AlignTag.Resources.arrange-small.png");
+            autoTagButton.SetContextualHelp(help);
+
             bim42Panel.AddStackedItems(distributeHorizontallyButton, distributeVerticallyButton, arrangeButton);
-            bim42Panel.AddStackedItems(untangleVerticallyButton, untangleHorizontallyButton);
+            bim42Panel.AddStackedItems(untangleVerticallyButton, untangleHorizontallyButton, autoTagButton);
 
         }
 
